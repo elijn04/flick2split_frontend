@@ -7,10 +7,8 @@ import { useRouter } from 'expo-router';
 import { Platform } from 'react';
 
 
-const ip = '10.0.0.218:5001'
-
 const { width } = Dimensions.get('window');
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${ip}`;
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 /**
  * Main app component for bill splitting application
