@@ -67,7 +67,7 @@ export default function Results() {
 
   const updateItemPrice = (index, newPrice) => {
     const updatedItems = [...bill.items];
-    updatedItems[index] = { ...updatedItems[index], price: parseFloat(newPrice) || 0 };
+    updatedItems[index] = { ...updatedItems[index], price: newPrice };
     
     // Only update subtotal if items are already confirmed
     if (itemsConfirmed) {

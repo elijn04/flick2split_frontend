@@ -147,27 +147,9 @@ export default function Index() {
     }
   };
 
-  // Add a test connection function
-  const testConnection = async () => {
-    try {
-      Alert.alert('Testing', `Connecting to ${API_URL}/test...`);
-      const response = await fetch(`${API_URL}/test`);
-      const data = await response.json();
-      Alert.alert('Connection Test', data.message);
-    } catch (error) {
-      Alert.alert('Connection Error', `Failed to connect: ${error.message}`);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <TouchableOpacity 
-        style={styles.testButton}
-        onPress={testConnection}
-      >
-        <Text style={styles.testButtonText}>Test Connection</Text>
-      </TouchableOpacity>
       <View style={styles.backgroundElements}>
         <View style={styles.circle1} />
         <View style={styles.circle2} />
@@ -435,21 +417,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   retakeButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  testButton: {
-    position: 'absolute',
-    top: 40,
-    right: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 15,
-    zIndex: 10,
-  },
-  testButtonText: {
     color: 'white',
     fontWeight: '600',
     fontSize: 14,
