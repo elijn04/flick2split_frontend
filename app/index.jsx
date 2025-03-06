@@ -4,141 +4,130 @@ import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
+import { Platform } from 'react';
+
+
+const ip = '10.0.0.218:5001'
 
 const { width } = Dimensions.get('window');
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.58:5001';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${ip}`;
 
+/**
+ * Main app component for bill splitting application
+ * Handles image capture, upload, and processing
+ */
 export default function Index() {
-  const [buttonState, setButtonState] = useState("idle"); // idle, loading, error, processing
+  const [buttonState, setButtonState] = useState("idle");
   const [image, setImage] = useState(null);
   const [responseData, setResponseData] = useState(null);
   const router = useRouter();
 
-  // Add cleanup effect when component mounts or when navigating back
+  // Reset state on mount/unmount
   useEffect(() => {
-    const cleanup = () => {
+    const resetState = () => {
       setImage(null);
       setButtonState("idle");
       setResponseData(null);
     };
-    
-    cleanup(); // Clean up when mounting
-    return cleanup; // Clean up when unmounting
+    resetState();
+    return resetState;
   }, []);
 
-  // Request camera and media library permissions
+  // Request permissions on mount
   useEffect(() => {
     (async () => {
-      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
-      const mediaLibraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const [camera, media] = await Promise.all([
+        ImagePicker.requestCameraPermissionsAsync(),
+        ImagePicker.requestMediaLibraryPermissionsAsync()
+      ]);
       
-      if (cameraPermission.status !== 'granted' || mediaLibraryPermission.status !== 'granted') {
+      if (camera.status !== 'granted' || media.status !== 'granted') {
         Alert.alert('Permissions needed', 'Camera and media library access is required for this app.');
       }
     })();
   }, []);
 
-  const takePhoto = async () => {
-    setImage(null); // Clear previous image
-    setResponseData(null); // Clear previous response
+  /**
+   * Handles image capture/selection errors
+   */
+  const handleImageError = (error) => {
+    console.log(error);
+    setButtonState("error");
+    setTimeout(() => setButtonState("idle"), 2000);
+  };
+
+  /**
+   * Common image handling setup
+   */
+  const setupImageCapture = () => {
+    setImage(null);
+    setResponseData(null);
     setButtonState("loading");
+  };
+
+  /**
+   * Launch camera to take photo
+   */
+  const takePhoto = async () => {
+    setupImageCapture();
     try {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
-        quality: 0.8,
+        quality: 1,
       });
       
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
+      if (!result.canceled) setImage(result.assets[0].uri);
       setButtonState("idle");
     } catch (error) {
-      console.log(error);
-      setButtonState("error");
-      setTimeout(() => setButtonState("idle"), 2000);
+      handleImageError(error);
     }
   };
 
+  /**
+   * Launch image picker
+   */
   const pickImage = async () => {
-    setImage(null); // Clear previous image
-    setResponseData(null); // Clear previous response
-    setButtonState("loading");
+    setupImageCapture();
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
-        quality: 0.8,
+        quality: 1,
       });
       
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
+      if (!result.canceled) setImage(result.assets[0].uri);
       setButtonState("idle");
     } catch (error) {
-      console.log(error);
-      setButtonState("error");
-      setTimeout(() => setButtonState("idle"), 2000);
+      handleImageError(error);
     }
   };
 
+  /**
+   * Process image and navigate to results
+   */
   const handleContinue = async () => {
     if (!image) return;
-    
     setButtonState("processing");
+    
     try {
-      console.log('Starting image processing...');
-      console.log('Image URI:', image);
-      
+      // Convert image to base64
       const base64Image = await FileSystem.readAsStringAsync(image, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      console.log('Base64 image length:', base64Image.length);
-      
-      console.log('Sending request to:', `${API_URL}/process-bill`);
+
+      // Send to server
       const response = await fetch(`${API_URL}/process-bill`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: base64Image,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Image }),
       });
-      
-      console.log('Response status:', response.status);
-      const responseText = await response.text();
-      console.log('Response text:', responseText);
 
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        throw new Error('Invalid JSON response from server');
-      }
+      const data = JSON.parse(await response.text());
 
-      // Validate the bill data structure
-      if (!data.bill || !data.bill.items || !data.bill.subtotal) {
-        console.error('Invalid bill data:', data);
-        Alert.alert(
-          "Processing Error",
-          "Could not process the bill correctly. Please try taking the photo again with better lighting and alignment.",
-          [{ text: "OK" }]
-        );
-        setButtonState("error");
-        return;
-      }
-
-      // Validate numeric values
-      if (isNaN(data.bill.subtotal) || data.bill.subtotal === 0) {
-        console.error('Invalid subtotal:', data.bill.subtotal);
-        Alert.alert(
-          "Invalid Bill Data",
-          "The bill subtotal appears to be invalid. Please try again.",
-          [{ text: "OK" }]
-        );
-        setButtonState("error");
-        return;
+      // Validate response data
+      if (!data.bill?.items || !data.bill?.subtotal || isNaN(data.bill.subtotal) || data.bill.subtotal === 0) {
+        throw new Error('Invalid bill data received');
       }
 
       setResponseData(data);
@@ -149,18 +138,12 @@ export default function Index() {
       
       setButtonState("idle");
     } catch (error) {
-      console.error('Detailed error:', error);
-      let errorMessage = 'Network error or server unavailable';
+      console.error('Error:', error);
+      const errorMessage = error.message.includes('Network request failed')
+        ? `Cannot connect to server at ${API_URL}. Check if server is running.`
+        : 'Network error or server unavailable';
       
-      if (error.message.includes('Network request failed')) {
-        errorMessage = `Cannot connect to server at ${API_URL}. Check if server is running.`;
-      }
-      
-      Alert.alert(
-        "Error",
-        errorMessage,
-        [{ text: "OK" }]
-      );
+      Alert.alert("Error", errorMessage, [{ text: "OK" }]);
       setButtonState("error");
       setTimeout(() => setButtonState("idle"), 2000);
     }

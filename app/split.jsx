@@ -8,7 +8,8 @@ import {
   FlatList, 
   Modal,
   ScrollView,
-  Alert
+  Alert,
+  Share
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -160,26 +161,28 @@ export default function SplitBill() {
     setSplitModalVisible(false);
   };
   
+  // Calculate total cost of all items
+  const calculateSubtotal = (items) => {
+    return items.reduce((sum, item) => sum + item.price, 0);
+  };
+
+  // Handle confirming items for current guest
   const confirmGuestItems = () => {
     if (selectedItems.length === 0) {
       Alert.alert("No Items Selected", "Please select at least one item for this guest.");
       return;
     }
     
-    // Calculate guest's items subtotal
-    const guestSubtotal = selectedItems.reduce((sum, item) => sum + item.price, 0);
-    
-    // Calculate what proportion of the total bill this guest's items represent
+    // Get guest's portion of the bill
+    const guestSubtotal = calculateSubtotal(selectedItems);
     const proportion = guestSubtotal / billData.subtotal;
     
-    // Calculate proportional tip and tax
+    // Calculate guest's share of tax and tip
     const proportionalTip = billData.tip * proportion;
     const proportionalTax = billData.tax * proportion;
-    
-    // Calculate total with tip and tax
     const guestTotal = guestSubtotal + proportionalTip + proportionalTax;
     
-    // Add guest to previous guests
+    // Create guest entry with their items and costs
     const newGuest = {
       name: guestName,
       items: selectedItems,
@@ -189,17 +192,13 @@ export default function SplitBill() {
       total: guestTotal
     };
     
+    // Add guest to list and update available items
     setPreviousGuests([...previousGuests, newGuest]);
-    
-    // Remove selected items from available items
     const remainingItems = availableItems.filter(
       item => !selectedItems.some(selected => selected.id === item.id)
     );
     
-    console.log('Selected items:', selectedItems.map(i => i.id));
-    console.log('Available before:', availableItems.map(i => i.id));
-    console.log('Available after:', remainingItems.map(i => i.id));
-    
+    // Reset for next guest
     setAvailableItems(remainingItems);
     setSelectedItems([]);
     setShowNameInput(true);
@@ -216,6 +215,49 @@ export default function SplitBill() {
   
   const formatCurrency = (amount) => {
     return `$${parseFloat(amount).toFixed(2)}`;
+  };
+  
+  // Format guest details for sharing
+  const formatGuestDetailsForSharing = () => {
+    let message = "Bill Split Summary\n";
+    message += "------------------------\n";
+    message += "Made with Flick2Split\n\n";
+    // Add quick summary of all guests first
+    
+    previousGuests.forEach(guest => {
+      message += '\n'
+      message += `${guest.name}: ${formatCurrency(guest.total)}\n`;
+    });
+    
+    // Add detailed breakdown
+    message += "\n------- Detailed Breakdown -------\n\n";
+    
+    previousGuests.forEach(guest => {
+      message += `${guest.name}'s Total: ${formatCurrency(guest.total)}\n`;
+      message += "Items:\n";
+      guest.items.forEach(item => {
+        message += `- ${item.name}: ${formatCurrency(item.price)}\n`;
+      });
+      message += `Subtotal: ${formatCurrency(guest.subtotal)}\n`;
+      message += `Tax: ${formatCurrency(guest.tax)}\n`;
+      message += `Tip: ${formatCurrency(guest.tip)}\n`;
+      message += `Total: ${formatCurrency(guest.total)}\n\n`;
+    });
+
+    return message;
+  };
+
+  // Handle share button press
+  const handleShare = async () => {
+    try {
+      const message = formatGuestDetailsForSharing();
+      await Share.share({
+        message: message,
+        title: 'Bill Split Details'
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share bill details');
+    }
   };
   
   if (!billData) {
@@ -331,6 +373,12 @@ export default function SplitBill() {
             <Text style={styles.completionText}>
               All items have been assigned to guests. Review the guest totals below.
             </Text>
+            <TouchableOpacity 
+              style={styles.shareButton}
+              onPress={handleShare}
+            >
+              <Text style={styles.shareButtonText}>Share Split Details</Text>
+            </TouchableOpacity>
           </View>
         )}
         
@@ -750,5 +798,17 @@ const styles = StyleSheet.create({
     color: '#666',
     marginVertical: 20,
     fontStyle: 'italic',
+  },
+  shareButton: {
+    backgroundColor: '#4CDE80',
+    paddingVertical: 14,
+    borderRadius: 30,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  shareButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 16,
   },
 }); 

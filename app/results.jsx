@@ -3,15 +3,20 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert 
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
 
+/**
+ * Results component for displaying and editing bill details
+ * Handles item editing, tip calculation, and bill splitting
+ */
 export default function Results() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  // Parse the bill data from params
+  // Initialize bill state from params
   const initialBill = params.bill ? JSON.parse(params.bill) : null;
   
-  // State for editable bill data
+  // State management
   const [bill, setBill] = useState(initialBill);
   const [editingItem, setEditingItem] = useState(null);
   const [editingQuantity, setEditingQuantity] = useState(null);
@@ -19,13 +24,11 @@ export default function Results() {
   const [selectedTipPercent, setSelectedTipPercent] = useState(null);
   const [editingTipAmount, setEditingTipAmount] = useState(false);
   const [hasTipInteraction, setHasTipInteraction] = useState(false);
-  
-  // Debug log to see what's coming in
-  useEffect(() => {
-    console.log('Initial Bill Data:', initialBill);
-    console.log('Current Bill State:', bill);
-  }, [bill]);
-  
+  const [itemsConfirmed, setItemsConfirmed] = useState(false);
+  const [backPressCount, setBackPressCount] = useState(0);
+  const [splitComplete, setSplitComplete] = useState(false);
+
+  // Handle missing bill data
   if (!bill) {
     return (
       <View style={styles.container}>
@@ -40,108 +43,113 @@ export default function Results() {
       </View>
     );
   }
-  
-  const formatCurrency = (amount) => {
-    return `$${parseFloat(amount).toFixed(2)}`;
-  };
-  
+
+  /**
+   * Format number as currency string
+   */
+  const formatCurrency = (amount) => `$${parseFloat(amount).toFixed(2)}`;
+
+  /**
+   * Item update handlers
+   */
   const updateItemName = (index, newName) => {
     const updatedItems = [...bill.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      name: newName || "Item"
-    };
-    
-    setBill(prev => ({
-      ...prev,
-      items: updatedItems
-    }));
-    
+    updatedItems[index] = { ...updatedItems[index], name: newName || "Item" };
+    setBill(prev => ({ ...prev, items: updatedItems }));
     setEditingName(null);
   };
-  
+
+  const calculateSubtotal = (items) => {
+    return items.reduce((sum, item) => {
+      return sum + (parseFloat(item.price) || 0) ;
+    }, 0);
+  };
+
   const updateItemPrice = (index, newPrice) => {
     const updatedItems = [...bill.items];
-    updatedItems[index] = {
-      ...updatedItems[index],
-      price: parseFloat(newPrice) || 0
-    };
+    updatedItems[index] = { ...updatedItems[index], price: parseFloat(newPrice) || 0 };
     
-    setBill(prev => ({
-      ...prev,
-      items: updatedItems
-    }));
-    
+    // Only update subtotal if items are already confirmed
+    if (itemsConfirmed) {
+      const newSubtotal = calculateSubtotal(updatedItems);
+      setBill(prev => ({ 
+        ...prev, 
+        items: updatedItems,
+        subtotal: newSubtotal,
+        total: newSubtotal + (prev.tax || 0) + (prev.tip || 0)
+      }));
+    } else {
+      setBill(prev => ({ ...prev, items: updatedItems }));
+    }
     setEditingItem(null);
   };
-  
+
   const updateItemQuantity = (index, newQuantity) => {
     const updatedItems = [...bill.items];
     updatedItems[index] = {
       ...updatedItems[index],
       quantity: newQuantity === '' ? '' : (parseInt(newQuantity) || 1)
     };
-    
-    setBill(prev => ({
-      ...prev,
-      items: updatedItems
-    }));
-    
+
+    // Only update subtotal if items are already confirmed
+    if (itemsConfirmed) {
+      const newSubtotal = calculateSubtotal(updatedItems);
+      setBill(prev => ({
+        ...prev,
+        items: updatedItems,
+        subtotal: newSubtotal,
+        total: newSubtotal + (prev.tax || 0) + (prev.tip || 0)
+      }));
+    } else {
+      setBill(prev => ({ ...prev, items: updatedItems }));
+    }
     setEditingQuantity(null);
   };
-  
+
+  /**
+   * Tip handling functions
+   */
   const updateTip = (newTip) => {
     const tipAmount = parseFloat(newTip) || 0;
-    
     setBill(prev => ({
       ...prev,
       tip: tipAmount,
       total: prev.subtotal + (prev.tax || 0) + tipAmount
     }));
   };
-  
+
   const selectTipPercent = (percent) => {
     setSelectedTipPercent(percent);
     setEditingTipAmount(false);
     setHasTipInteraction(true);
-    
-    // Calculate and update tip amount based on percentage
     const tipAmount = (percent / 100) * bill.subtotal;
     updateTip(tipAmount);
   };
-  
+
   const handleCustomTipChange = (value) => {
     const tipAmount = parseFloat(value) || 0;
     updateTip(tipAmount);
-    
-    // Calculate percentage for custom amount
     const tipPercent = bill.subtotal > 0 ? ((tipAmount / bill.subtotal) * 100).toFixed(1) : 0;
     setSelectedTipPercent(parseFloat(tipPercent));
     setHasTipInteraction(true);
   };
-  
+
+  /**
+   * Item management functions
+   */
   const addNewItem = () => {
-    const newItem = {
-      name: "New Item",
-      quantity: 1,
-      price: 0
-    };
-    
-    const newItems = [...bill.items, newItem];
-    
+    const newItem = { name: "New Item", quantity: 1, price: 0 };
     setBill(prev => ({
       ...prev,
-      items: newItems
+      items: [...prev.items, newItem]
     }));
-    
-    // Set the new item to be in edit mode for the name
-    setTimeout(() => {
-      setEditingName(bill.items.length);
-    }, 100);
+    setTimeout(() => setEditingName(bill.items.length), 100);
   };
 
+  /**
+   * Navigation and sharing handlers
+   */
   const handleSplitBill = () => {
-    // Format the bill data
     const billData = {
       items: bill.items,
       subtotal: parseFloat(bill.subtotal),
@@ -150,13 +158,52 @@ export default function Results() {
       total: parseFloat(bill.total)
     };
 
-    // Navigate directly to split page
     router.push({
       pathname: '/split',
-      params: { 
-        billData: JSON.stringify(billData)
-      }
+      params: { billData: JSON.stringify(billData) }
     });
+    
+    setSplitComplete(true);
+  };
+
+  const handleBackPress = () => {
+    if (backPressCount === 0) {
+      setBackPressCount(1);
+      setTimeout(() => setBackPressCount(0), 2000);
+    } else {
+      router.replace("/");
+    }
+  };
+
+  const shareGuestList = async () => {
+    const guestListText = previousGuests.map(guest => {
+      const items = guest.items.map(item => 
+        `  - ${item.name}: ${formatCurrency(item.price)}`
+      ).join('\n');
+      return `${guest.name}:\n${items}\n  Subtotal: ${formatCurrency(guest.subtotal)}\n  Tax: ${formatCurrency(guest.tax)}\n  Tip: ${formatCurrency(guest.tip)}\n  Total: ${formatCurrency(guest.total)}\n`;
+    }).join('\n');
+
+    try {
+      await Sharing.shareAsync(
+        URL.createObjectURL(
+          new Blob([`Bill Split Summary\n\n${guestListText}`], { type: 'text/plain' })
+        ),
+        { mimeType: 'text/plain', dialogTitle: 'Share Bill Split' }
+      );
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
+  // Add this to handle confirm items
+  const handleConfirmItems = () => {
+    const newSubtotal = calculateSubtotal(bill.items);
+    setBill(prev => ({
+      ...prev,
+      subtotal: newSubtotal,
+      total: newSubtotal + (prev.tax || 0) + (prev.tip || 0)
+    }));
+    setItemsConfirmed(true);
   };
 
   return (
@@ -170,7 +217,7 @@ export default function Results() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.replace("/")}
+          onPress={handleBackPress}
         >
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
@@ -283,116 +330,139 @@ export default function Results() {
               <Ionicons name="add-circle" size={20} color="#3442C6" />
               <Text style={styles.addItemText}>Add Item</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.confirmItemsButton}
+              onPress={handleConfirmItems}
+            >
+              <Text style={styles.confirmItemsText}>Confirm Items</Text>
+            </TouchableOpacity>
           </View>
         </View>
         
-        {/* New Tip Section */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Add Tip</Text>
-          <View style={styles.tipButtonsContainer}>
-            <TouchableOpacity 
-              style={[
-                styles.tipButton, 
-                selectedTipPercent === 0 && styles.tipButtonSelected
-              ]}
-              onPress={() => {
-                selectTipPercent(0);
-                updateTip(0);
-              }}
-            >
-              <Text style={[
-                styles.tipButtonText,
-                selectedTipPercent === 0 && styles.tipButtonTextSelected
-              ]}>No Tip</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.tipButton, 
-                selectedTipPercent === 15 && styles.tipButtonSelected
-              ]}
-              onPress={() => selectTipPercent(15)}
-            >
-              <Text style={[
-                styles.tipButtonText,
-                selectedTipPercent === 15 && styles.tipButtonTextSelected
-              ]}>15%</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.tipButton, 
-                selectedTipPercent === 20 && styles.tipButtonSelected
-              ]}
-              onPress={() => selectTipPercent(20)}
-            >
-              <Text style={[
-                styles.tipButtonText,
-                selectedTipPercent === 20 && styles.tipButtonTextSelected
-              ]}>20%</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.customTipContainer}>
-              {editingTipAmount ? (
-                <TextInput
-                  style={styles.customTipInput}
-                  value={bill.tip?.toString() || "0"}
-                  keyboardType="numeric"
-                  autoFocus
-                  onChangeText={handleCustomTipChange}
-                  onBlur={() => setEditingTipAmount(false)}
-                  onSubmitEditing={() => setEditingTipAmount(false)}
-                />
-              ) : (
-                <TouchableOpacity 
-                  style={styles.customTipButton}
-                  onPress={() => setEditingTipAmount(true)}
-                >
-                  <Text style={styles.customTipText}>
-                    {formatCurrency(bill.tip || 0)}
-                  </Text>
-                  <Ionicons name="pencil" size={12} color="#666" style={styles.tipEditIcon} />
-                </TouchableOpacity>
-              )}
+        {itemsConfirmed ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Add Tip</Text>
+            <View style={styles.tipButtonsContainer}>
+              <TouchableOpacity 
+                style={[
+                  styles.tipButton, 
+                  selectedTipPercent === 0 && styles.tipButtonSelected
+                ]}
+                onPress={() => {
+                  selectTipPercent(0);
+                  updateTip(0);
+                }}
+              >
+                <Text style={[
+                  styles.tipButtonText,
+                  selectedTipPercent === 0 && styles.tipButtonTextSelected
+                ]}>No Tip</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.tipButton, 
+                  selectedTipPercent === 15 && styles.tipButtonSelected
+                ]}
+                onPress={() => selectTipPercent(15)}
+              >
+                <Text style={[
+                  styles.tipButtonText,
+                  selectedTipPercent === 15 && styles.tipButtonTextSelected
+                ]}>15%</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.tipButton, 
+                  selectedTipPercent === 20 && styles.tipButtonSelected
+                ]}
+                onPress={() => selectTipPercent(20)}
+              >
+                <Text style={[
+                  styles.tipButtonText,
+                  selectedTipPercent === 20 && styles.tipButtonTextSelected
+                ]}>20%</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.customTipContainer}>
+                {editingTipAmount ? (
+                  <TextInput
+                    style={styles.customTipInput}
+                    value={bill.tip?.toString() || "0"}
+                    keyboardType="numeric"
+                    autoFocus
+                    onChangeText={handleCustomTipChange}
+                    onBlur={() => setEditingTipAmount(false)}
+                    onSubmitEditing={() => setEditingTipAmount(false)}
+                  />
+                ) : (
+                  <TouchableOpacity 
+                    style={styles.customTipButton}
+                    onPress={() => setEditingTipAmount(true)}
+                  >
+                    <Text style={styles.customTipText}>
+                      {formatCurrency(bill.tip || 0)}
+                    </Text>
+                    <Ionicons name="pencil" size={12} color="#666" style={styles.tipEditIcon} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
+            
+            {(selectedTipPercent !== null || bill.tip > 0) && (
+              <Text style={styles.tipCalculationText}>
+                {selectedTipPercent !== null 
+                  ? `${selectedTipPercent}% of ${formatCurrency(bill.subtotal)} = ${formatCurrency(bill.tip || 0)}`
+                  : `${((bill.tip / bill.subtotal) * 100).toFixed(1)}% of ${formatCurrency(bill.subtotal)} = ${formatCurrency(bill.tip)}`
+                }
+              </Text>
+            )}
           </View>
-          
-          {(selectedTipPercent !== null || bill.tip > 0) && (
-            <Text style={styles.tipCalculationText}>
-              {selectedTipPercent !== null 
-                ? `${selectedTipPercent}% of ${formatCurrency(bill.subtotal)} = ${formatCurrency(bill.tip || 0)}`
-                : `${((bill.tip / bill.subtotal) * 100).toFixed(1)}% of ${formatCurrency(bill.subtotal)} = ${formatCurrency(bill.tip)}`
-              }
-            </Text>
-          )}
-        </View>
+        ) : (
+          <Text style={styles.confirmPrompt}>Please confirm your items to continue</Text>
+        )}
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Summary</Text>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(bill.subtotal || 0)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tax</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(bill.tax || 0)}</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Tip</Text>
-            <Text style={styles.summaryValue}>{formatCurrency(bill.tip || 0)}</Text>
-          </View>
-          <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{formatCurrency(bill.total)}</Text>
-          </View>
-        </View>
+        {hasTipInteraction && (
+          <>
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Summary</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(bill.subtotal || 0)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tax</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(bill.tax || 0)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tip</Text>
+                <Text style={styles.summaryValue}>{formatCurrency(bill.tip || 0)}</Text>
+              </View>
+              <View style={[styles.summaryRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalValue}>{formatCurrency(bill.total)}</Text>
+              </View>
+            </View>
 
-        <TouchableOpacity 
-          style={styles.splitButton}
-          onPress={handleSplitBill}
-        >
-          <Text style={styles.splitButtonText}>Split Bill</Text>
-        </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.splitButton}
+              onPress={handleSplitBill}
+            >
+              <Text style={styles.splitButtonText}>Split Bill</Text>
+            </TouchableOpacity>
+
+            {splitComplete && (
+              <TouchableOpacity 
+                style={styles.shareButton}
+                onPress={shareGuestList}
+              >
+                <Text style={styles.shareButtonText}>Share Bill Split</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -737,5 +807,54 @@ const styles = StyleSheet.create({
     color: '#3442C6',
     fontWeight: '700',
     fontSize: 18,
+  },
+  tipPrompt: {
+    textAlign: 'center',
+    color: '#666',
+    marginTop: 20,
+    marginBottom: 40,
+    fontSize: 16,
+    fontStyle: 'italic',
+  },
+  confirmItemsButton: {
+    backgroundColor: '#FFD700',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 15,
+    marginHorizontal: 40,
+  },
+  confirmItemsText: {
+    color: '#333',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  confirmPrompt: {
+    textAlign: 'center',
+    color: '#666',
+    marginTop: 20,
+    marginBottom: 40,
+    fontSize: 16,
+    fontStyle: 'italic',
+  },
+  shareButton: {
+    backgroundColor: '#3442C6',
+    paddingVertical: 18,
+    borderRadius: 30,
+    alignItems: 'center',
+    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  shareButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 18,
+    marginLeft: 8,
   },
 }); 
