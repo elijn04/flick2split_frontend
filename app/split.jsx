@@ -219,11 +219,15 @@ export default function SplitBill() {
   
   // Format guest details for sharing
   const formatGuestDetailsForSharing = () => {
+    if (!previousGuests || previousGuests.length === 0) {
+      return "No guests have been added yet.";
+    }
+    
     let message = "Bill Split Summary\n";
     message += "------------------------\n";
     message += "Made with Flick2Split\n\n";
-    // Add quick summary of all guests first
     
+    // Add quick summary of all guests first
     previousGuests.forEach(guest => {
       message += '\n'
       message += `${guest.name}: ${formatCurrency(guest.total)}\n`;
@@ -250,12 +254,18 @@ export default function SplitBill() {
   // Handle share button press
   const handleShare = async () => {
     try {
+      if (!previousGuests || previousGuests.length === 0) {
+        Alert.alert('No Data', 'There are no guests to share information about.');
+        return;
+      }
+      
       const message = formatGuestDetailsForSharing();
       await Share.share({
         message: message,
         title: 'Bill Split Details'
       });
     } catch (error) {
+      console.error('Share error:', error);
       Alert.alert('Error', 'Failed to share bill details');
     }
   };

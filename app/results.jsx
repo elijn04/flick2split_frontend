@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,7 +67,7 @@ export default function Results() {
 
   const updateItemPrice = (index, newPrice) => {
     const updatedItems = [...bill.items];
-    updatedItems[index] = { ...updatedItems[index], price: newPrice };
+    updatedItems[index] = { ...updatedItems[index], price: parseFloat(newPrice) || 0 };
     
     // Only update subtotal if items are already confirmed
     if (itemsConfirmed) {
@@ -176,22 +176,26 @@ export default function Results() {
   };
 
   const shareGuestList = async () => {
-    const guestListText = previousGuests.map(guest => {
-      const items = guest.items.map(item => 
-        `  - ${item.name}: ${formatCurrency(item.price)}`
-      ).join('\n');
-      return `${guest.name}:\n${items}\n  Subtotal: ${formatCurrency(guest.subtotal)}\n  Tax: ${formatCurrency(guest.tax)}\n  Tip: ${formatCurrency(guest.tip)}\n  Total: ${formatCurrency(guest.total)}\n`;
-    }).join('\n');
-
     try {
+      // Check if previousGuests exists before using it
+      if (!bill || !bill.items) {
+        Alert.alert("Error", "No bill data available to share");
+        return;
+      }
+      
+      // Create a summary from the current bill instead of undefined previousGuests
+      const billSummary = `Bill Summary\n\nSubtotal: ${formatCurrency(bill.subtotal || 0)}\nTax: ${formatCurrency(bill.tax || 0)}\nTip: ${formatCurrency(bill.tip || 0)}\nTotal: ${formatCurrency(bill.total || 0)}\n\nItems:\n${bill.items.map(item => `- ${item.name}: ${formatCurrency(item.price)}`).join('\n')}`;
+      
+      // Use proper sharing API for React Native
       await Sharing.shareAsync(
-        URL.createObjectURL(
-          new Blob([`Bill Split Summary\n\n${guestListText}`], { type: 'text/plain' })
-        ),
-        { mimeType: 'text/plain', dialogTitle: 'Share Bill Split' }
+        Platform.OS === 'web' 
+          ? URL.createObjectURL(new Blob([billSummary], { type: 'text/plain' }))
+          : `data:text/plain;base64,${Buffer.from(billSummary).toString('base64')}`,
+        { mimeType: 'text/plain', dialogTitle: 'Share Bill Summary' }
       );
     } catch (error) {
       console.error('Error sharing:', error);
+      Alert.alert("Error", "Failed to share bill summary");
     }
   };
 

@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
-import { Platform } from 'react';
+import { Platform } from 'react-native';
 
 
 const { width } = Dimensions.get('window');
@@ -34,13 +34,18 @@ export default function Index() {
   // Request permissions on mount
   useEffect(() => {
     (async () => {
-      const [camera, media] = await Promise.all([
-        ImagePicker.requestCameraPermissionsAsync(),
-        ImagePicker.requestMediaLibraryPermissionsAsync()
-      ]);
-      
-      if (camera.status !== 'granted' || media.status !== 'granted') {
-        Alert.alert('Permissions needed', 'Camera and media library access is required for this app.');
+      try {
+        const [camera, media] = await Promise.all([
+          ImagePicker.requestCameraPermissionsAsync(),
+          ImagePicker.requestMediaLibraryPermissionsAsync()
+        ]);
+        
+        if (camera.status !== 'granted' || media.status !== 'granted') {
+          Alert.alert('Permissions needed', 'Camera and media library access is required for this app.');
+        }
+      } catch (error) {
+        console.error('Permission request error:', error);
+        Alert.alert('Permission Error', 'Failed to request permissions');
       }
     })();
   }, []);
@@ -121,6 +126,10 @@ export default function Index() {
         body: JSON.stringify({ image: base64Image }),
       });
 
+      if (!response.ok) {
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+
       const data = JSON.parse(await response.text());
 
       // Validate response data
@@ -139,7 +148,7 @@ export default function Index() {
       console.error('Error:', error);
       const errorMessage = error.message.includes('Network request failed')
         ? `Cannot connect to server at ${API_URL}. Check if server is running.`
-        : 'Network error or server unavailable';
+        : error.message || 'Network error or server unavailable';
       
       Alert.alert("Error", errorMessage, [{ text: "OK" }]);
       setButtonState("error");
@@ -387,11 +396,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 4,
     borderColor: 'rgba(255, 255, 255, 0.8)',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+      },
+      android: {
+        elevation: 10,
+      }
+    }),
     position: 'relative',
   },
   previewImage: {
