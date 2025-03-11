@@ -16,8 +16,21 @@ export default function Results() {
   // Initialize bill state from params
   const initialBill = params.bill ? JSON.parse(params.bill) : null;
   
+  // Process initial bill data to ensure prices are numbers
+  const processedInitialBill = initialBill ? {
+    ...initialBill,
+    items: initialBill.items.map(item => ({
+      ...item,
+      price: parseFloat(item.price) || 0
+    })),
+    subtotal: parseFloat(initialBill.subtotal) || 0,
+    tax: parseFloat(initialBill.tax) || 0,
+    tip: parseFloat(initialBill.tip) || 0,
+    total: parseFloat(initialBill.total) || 0
+  } : null;
+  
   // State management
-  const [bill, setBill] = useState(initialBill);
+  const [bill, setBill] = useState(processedInitialBill);
   const [editingItem, setEditingItem] = useState(null);
   const [editingQuantity, setEditingQuantity] = useState(null);
   const [editingName, setEditingName] = useState(null);
@@ -61,13 +74,16 @@ export default function Results() {
 
   const calculateSubtotal = (items) => {
     return items.reduce((sum, item) => {
-      return sum + (parseFloat(item.price) || 0) ;
+      return sum + (parseFloat(item.price) || 0);
     }, 0);
   };
 
   const updateItemPrice = (index, newPrice) => {
     const updatedItems = [...bill.items];
-    updatedItems[index] = { ...updatedItems[index], price: parseFloat(newPrice) || 0 };
+    updatedItems[index] = { 
+      ...updatedItems[index], 
+      price: parseFloat(newPrice) || 0 
+    };
     
     // Only update subtotal if items are already confirmed
     if (itemsConfirmed) {
