@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 
 
 const { width } = Dimensions.get('window');
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://flick2split-backend.onrender.com';
 
 /**
  * Main app component for bill splitting application

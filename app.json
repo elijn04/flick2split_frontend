@@ -2,7 +2,7 @@
   "expo": {
     "name": "flick2split",
     "slug": "flick2split",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -41,7 +41,8 @@
       },
       "eas": {
         "projectId": "2e08b1c1-88ec-42f7-8e90-abb56a426de5"
-      }
+      },
+      "EXPO_PUBLIC_BACKEND_URL": "https://flick2split-backend.onrender.com"
     }
   }
 }
