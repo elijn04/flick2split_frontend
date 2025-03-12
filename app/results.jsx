@@ -21,6 +21,7 @@ export default function Results() {
     ...initialBill,
     items: initialBill.items.map(item => ({
       ...item,
+      quantity: parseInt(item.quantity) || 1,
       price: parseFloat(item.price) || 0
     })),
     subtotal: parseFloat(initialBill.subtotal) || 0,
@@ -154,7 +155,11 @@ export default function Results() {
    * Item management functions
    */
   const addNewItem = () => {
-    const newItem = { name: "New Item", quantity: 1, price: 0 };
+    const newItem = { 
+      name: "New Item", 
+      quantity: 1, 
+      price: 0 
+    };
     setBill(prev => ({
       ...prev,
       items: [...prev.items, newItem]
