@@ -36,8 +36,16 @@ export default function Index() {
     (async () => {
       try {
         const [camera, media] = await Promise.all([
-          ImagePicker.requestCameraPermissionsAsync(),
-          ImagePicker.requestMediaLibraryPermissionsAsync()
+          ImagePicker.requestCameraPermissionsAsync({
+            ios: {
+              usageDescription: "We need camera access to take photos of your bills for processing and splitting expenses among friends."
+            }
+          }),
+          ImagePicker.requestMediaLibraryPermissionsAsync({
+            ios: {
+              usageDescription: "We need access to your photo library to select bill images for processing and splitting expenses among friends."
+            }
+          })
         ]);
         
         if (camera.status !== 'granted' || media.status !== 'granted') {
