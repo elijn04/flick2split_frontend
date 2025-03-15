@@ -36,24 +36,15 @@ export default function Index() {
     (async () => {
       try {
         const [camera, media] = await Promise.all([
-          ImagePicker.requestCameraPermissionsAsync({
-            ios: {
-              usageDescription: "We need camera access to take photos of your bills for processing and splitting expenses among friends."
-            }
-          }),
-          ImagePicker.requestMediaLibraryPermissionsAsync({
-            ios: {
-              usageDescription: "We need access to your photo library to select bill images for processing and splitting expenses among friends."
-            }
-          })
+          ImagePicker.requestCameraPermissionsAsync(),
+          ImagePicker.requestMediaLibraryPermissionsAsync()
         ]);
-        
+
         if (camera.status !== 'granted' || media.status !== 'granted') {
-          Alert.alert('Permissions needed', 'Camera and media library access is required for this app.');
+          alert('Sorry, we need permissions to make this work!');
         }
       } catch (error) {
-        console.error('Permission request error:', error);
-        Alert.alert('Permission Error', 'Failed to request permissions');
+        console.log(error);
       }
     })();
   }, []);

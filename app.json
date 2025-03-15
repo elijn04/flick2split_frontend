@@ -12,7 +12,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.flick2split",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Flick2Split uses your camera to capture images of receipts so it can automatically read the bill details and help split the total amount, including tax and tips, between you and your friends.",
+        "NSPhotoLibraryUsageDescription": "Flick2Split accesses your photo library so you can select existing images of receipts to process and split expenses among friends."
       }
     },
     "web": {
