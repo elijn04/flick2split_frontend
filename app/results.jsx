@@ -1,9 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Platform } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
+import { currencies, formatCurrency as formatCurrencyUtil, searchCurrencies } from './result_components/utils/currencies';
+
+// Import modularized components
+import { CurrencySelect } from './result_components/CurrencySelect';
+import { ItemsList } from './result_components/ItemsList';
+import { TipSection } from './result_components/TipSection';
+import { BillSummary } from './result_components/BillSummary';
 
 /**
  * Results component for displaying and editing bill details
@@ -12,6 +19,7 @@ import * as Sharing from 'expo-sharing';
 export default function Results() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const scrollViewRef = useRef(null);
   
   // Initialize bill state from params
   const initialBill = params.bill ? JSON.parse(params.bill) : null;
@@ -27,7 +35,8 @@ export default function Results() {
     subtotal: parseFloat(initialBill.subtotal) || 0,
     tax: parseFloat(initialBill.tax) || 0,
     tip: parseFloat(initialBill.tip) || 0,
-    total: parseFloat(initialBill.total) || 0
+    total: parseFloat(initialBill.total) || 0,
+    uses_usd: initialBill.uses_usd !== undefined ? initialBill.uses_usd : true
   } : null;
   
   // State management
@@ -41,6 +50,17 @@ export default function Results() {
   const [itemsConfirmed, setItemsConfirmed] = useState(false);
   const [backPressCount, setBackPressCount] = useState(0);
   const [splitComplete, setSplitComplete] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState(bill?.uses_usd ? 'USD' : null);
+  const [showCurrencySelect, setShowCurrencySelect] = useState(!bill?.uses_usd);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showConversionOption, setShowConversionOption] = useState(false);
+  const [wantToConvert, setWantToConvert] = useState(null);
+  const [conversionCurrency, setConversionCurrency] = useState(null);
+  const [showConversionDropdown, setShowConversionDropdown] = useState(false);
+
+  // Filter currencies based on search
+  const filteredCurrencies = searchCurrencies(searchQuery);
 
   // Handle missing bill data
   if (!bill) {
@@ -61,7 +81,9 @@ export default function Results() {
   /**
    * Format number as currency string
    */
-  const formatCurrency = (amount) => `$${parseFloat(amount).toFixed(2)}`;
+  const formatCurrency = (amount) => {
+    return formatCurrencyUtil(amount, selectedCurrency);
+  };
 
   /**
    * Item update handlers
@@ -144,11 +166,29 @@ export default function Results() {
   };
 
   const handleCustomTipChange = (value) => {
-    const tipAmount = parseFloat(value) || 0;
-    updateTip(tipAmount);
-    const tipPercent = bill.subtotal > 0 ? ((tipAmount / bill.subtotal) * 100).toFixed(1) : 0;
-    setSelectedTipPercent(parseFloat(tipPercent));
-    setHasTipInteraction(true);
+    // Allow decimal input even if parseFloat would return 0
+    // This handles cases like "0." or "0.0" during typing
+    if (value === '' || value === '.' || value === '0.') {
+      setBill(prev => ({
+        ...prev,
+        tip: 0
+      }));
+      setSelectedTipPercent(0);
+      setHasTipInteraction(true);
+      return;
+    }
+    
+    // Replace any commas with periods for international input
+    const sanitizedValue = value.replace(',', '.');
+    
+    // Only update if it's a valid number format
+    if (!isNaN(sanitizedValue) && sanitizedValue !== '') {
+      const tipAmount = parseFloat(sanitizedValue) || 0;
+      updateTip(tipAmount);
+      const tipPercent = bill.subtotal > 0 ? ((tipAmount / bill.subtotal) * 100).toFixed(1) : 0;
+      setSelectedTipPercent(parseFloat(tipPercent));
+      setHasTipInteraction(true);
+    }
   };
 
   /**
@@ -230,6 +270,35 @@ export default function Results() {
     }));
     setItemsConfirmed(true);
   };
+  
+  // Scroll handler to show tip section when items are confirmed
+  const scrollToTipSection = () => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollToEnd({ animated: true });
+    }
+  };
+
+  /**
+   * Handle currency selection
+   */
+  const handleCurrencySelect = (currencyCode) => {
+    setSelectedCurrency(currencyCode);
+    setIsDropdownOpen(false);
+    setShowConversionOption(true);
+    setSearchQuery('');
+    setBill(prev => ({
+      ...prev,
+      uses_usd: currencyCode === 'USD'
+    }));
+  };
+  
+  /**
+   * Handle conversion currency selection
+   */
+  const handleConversionCurrencySelect = (currencyCode) => {
+    setConversionCurrency(currencyCode);
+    setShowConversionDropdown(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -249,242 +318,83 @@ export default function Results() {
         <Text style={styles.title}>Review & Edit Receipt</Text>
       </View>
 
-      <ScrollView style={styles.content}>
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Items</Text>
-          <View style={styles.itemsContainer}>
-            <View style={styles.itemHeader}>
-              <Text style={styles.itemHeaderText}>Item</Text>
-              <Text style={styles.itemHeaderText}>Qty</Text>
-              <Text style={styles.itemHeaderText}>Price</Text>
-            </View>
-            
-            {bill.items.map((item, index) => (
-              <View key={index} style={styles.itemRow}>
-                {editingName === index ? (
-                  <TextInput
-                    style={styles.nameInput}
-                    value={item.name}
-                    autoFocus
-                    onChangeText={(text) => {
-                      const updatedItems = [...bill.items];
-                      updatedItems[index] = {
-                        ...updatedItems[index],
-                        name: text
-                      };
-                      setBill(prev => ({...prev, items: updatedItems}));
-                    }}
-                    onBlur={() => updateItemName(index, bill.items[index].name)}
-                    onSubmitEditing={() => updateItemName(index, bill.items[index].name)}
-                  />
-                ) : (
-                  <View style={styles.nameContainer}>
-                    <TouchableOpacity 
-                      style={styles.editIcon}
-                      onPress={() => setEditingName(index)}
-                    >
-                    </TouchableOpacity>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                  </View>
-                )}
-                
-                {editingQuantity === index ? (
-                  <TextInput
-                    style={styles.quantityInput}
-                    value={item.quantity?.toString()}
-                    keyboardType="numeric"
-                    autoFocus
-                    onChangeText={(text) => {
-                      const updatedItems = [...bill.items];
-                      updatedItems[index] = {
-                        ...updatedItems[index],
-                        quantity: text
-                      };
-                      setBill(prev => ({...prev, items: updatedItems}));
-                    }}
-                    onBlur={() => updateItemQuantity(index, bill.items[index].quantity)}
-                    onSubmitEditing={() => updateItemQuantity(index, bill.items[index].quantity)}
-                  />
-                ) : (
-                  <View style={styles.quantityContainer}>
-                    <Text style={styles.itemQuantity}>{item.quantity || 1}</Text>
-                    <TouchableOpacity 
-                      style={styles.editIcon}
-                      onPress={() => setEditingQuantity(index)}
-                    >
-                      <Ionicons name="pencil" size={12} color="#666" />
-                    </TouchableOpacity>
-                  </View>
-                )}
-                
-                {editingItem === index ? (
-                  <TextInput
-                    style={styles.priceInput}
-                    value={item.price?.toString() || "0"}
-                    keyboardType="numeric"
-                    autoFocus
-                    onChangeText={(text) => {
-                      const updatedItems = [...bill.items];
-                      updatedItems[index] = {
-                        ...updatedItems[index],
-                        price: text
-                      };
-                      setBill(prev => ({...prev, items: updatedItems}));
-                    }}
-                    onBlur={() => updateItemPrice(index, bill.items[index].price)}
-                    onSubmitEditing={() => updateItemPrice(index, bill.items[index].price)}
-                  />
-                ) : (
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
-                    <TouchableOpacity 
-                      style={styles.editIcon}
-                      onPress={() => setEditingItem(index)}
-                    >
-                      <Ionicons name="pencil" size={12} color="#666" />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))}
-            
-            <TouchableOpacity 
-              style={styles.addItemButton}
-              onPress={addNewItem}
-            >
-              <Ionicons name="add-circle" size={20} color="#3442C6" />
-              <Text style={styles.addItemText}>Add Item</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.confirmItemsButton}
-              onPress={handleConfirmItems}
-            >
-              <Text style={styles.confirmItemsText}>Confirm Items</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        {itemsConfirmed ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Add Tip</Text>
-            <View style={styles.tipButtonsContainer}>
-              <TouchableOpacity 
-                style={[
-                  styles.tipButton, 
-                  selectedTipPercent === 0 && styles.tipButtonSelected
-                ]}
-                onPress={() => {
-                  selectTipPercent(0);
-                  updateTip(0);
-                }}
-              >
-                <Text style={[
-                  styles.tipButtonText,
-                  selectedTipPercent === 0 && styles.tipButtonTextSelected
-                ]}>No Tip</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[
-                  styles.tipButton, 
-                  selectedTipPercent === 15 && styles.tipButtonSelected
-                ]}
-                onPress={() => selectTipPercent(15)}
-              >
-                <Text style={[
-                  styles.tipButtonText,
-                  selectedTipPercent === 15 && styles.tipButtonTextSelected
-                ]}>15%</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[
-                  styles.tipButton, 
-                  selectedTipPercent === 20 && styles.tipButtonSelected
-                ]}
-                onPress={() => selectTipPercent(20)}
-              >
-                <Text style={[
-                  styles.tipButtonText,
-                  selectedTipPercent === 20 && styles.tipButtonTextSelected
-                ]}>20%</Text>
-              </TouchableOpacity>
-              
-              <View style={styles.customTipContainer}>
-                {editingTipAmount ? (
-                  <TextInput
-                    style={styles.customTipInput}
-                    value={bill.tip?.toString() || "0"}
-                    keyboardType="numeric"
-                    autoFocus
-                    onChangeText={handleCustomTipChange}
-                    onBlur={() => setEditingTipAmount(false)}
-                    onSubmitEditing={() => setEditingTipAmount(false)}
-                  />
-                ) : (
-                  <TouchableOpacity 
-                    style={styles.customTipButton}
-                    onPress={() => setEditingTipAmount(true)}
-                  >
-                    <Text style={styles.customTipText}>
-                      {formatCurrency(bill.tip || 0)}
-                    </Text>
-                    <Ionicons name="pencil" size={12} color="#666" style={styles.tipEditIcon} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-            
-            {(selectedTipPercent !== null || bill.tip > 0) && (
-              <Text style={styles.tipCalculationText}>
-                {selectedTipPercent !== null 
-                  ? `${selectedTipPercent}% of ${formatCurrency(bill.subtotal)} = ${formatCurrency(bill.tip || 0)}`
-                  : `${((bill.tip / bill.subtotal) * 100).toFixed(1)}% of ${formatCurrency(bill.subtotal)} = ${formatCurrency(bill.tip)}`
-                }
-              </Text>
-            )}
-          </View>
-        ) : (
-          <Text style={styles.confirmPrompt}>Please confirm your items to continue</Text>
+      <ScrollView 
+        style={styles.content}
+        ref={scrollViewRef}
+      >
+        {showCurrencySelect && (
+          <CurrencySelect
+            selectedCurrency={selectedCurrency}
+            setSelectedCurrency={setSelectedCurrency}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            isDropdownOpen={isDropdownOpen}
+            setIsDropdownOpen={setIsDropdownOpen}
+            showConversionOption={showConversionOption}
+            wantToConvert={wantToConvert}
+            setWantToConvert={setWantToConvert}
+            conversionCurrency={conversionCurrency}
+            setConversionCurrency={setConversionCurrency}
+            showConversionDropdown={showConversionDropdown}
+            setShowConversionDropdown={setShowConversionDropdown}
+            setShowCurrencySelect={setShowCurrencySelect}
+            filteredCurrencies={filteredCurrencies}
+            handleCurrencySelect={handleCurrencySelect}
+            handleConversionCurrencySelect={handleConversionCurrencySelect}
+          />
         )}
 
-        {hasTipInteraction && (
+        {!showCurrencySelect && (
           <>
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Summary</Text>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(bill.subtotal || 0)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tax</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(bill.tax || 0)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tip</Text>
-                <Text style={styles.summaryValue}>{formatCurrency(bill.tip || 0)}</Text>
-              </View>
-              <View style={[styles.summaryRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{formatCurrency(bill.total)}</Text>
-              </View>
-            </View>
+            <ItemsList
+              bill={bill}
+              setBill={setBill}
+              editingItem={editingItem}
+              setEditingItem={setEditingItem}
+              editingQuantity={editingQuantity}
+              setEditingQuantity={setEditingQuantity}
+              editingName={editingName}
+              setEditingName={setEditingName}
+              itemsConfirmed={itemsConfirmed}
+              handleConfirmItems={handleConfirmItems}
+              formatCurrency={formatCurrency}
+              updateItemName={updateItemName}
+              updateItemPrice={updateItemPrice}
+              updateItemQuantity={updateItemQuantity}
+              addNewItem={addNewItem}
+              onConfirmScroll={scrollToTipSection}
+            />
+            
+            {itemsConfirmed ? (
+              <TipSection
+                bill={bill}
+                selectedTipPercent={selectedTipPercent}
+                editingTipAmount={editingTipAmount}
+                setEditingTipAmount={setEditingTipAmount}
+                formatCurrency={formatCurrency}
+                selectTipPercent={selectTipPercent}
+                handleCustomTipChange={handleCustomTipChange}
+                onTipSelect={() => {
+                  // Short delay to ensure UI updates before scrolling
+                  setTimeout(() => {
+                    if (scrollViewRef.current) {
+                      scrollViewRef.current.scrollToEnd({ animated: true });
+                    }
+                  }, 100);
+                }}
+              />
+            ) : (
+              <Text style={styles.confirmPrompt}>Please confirm your items to continue</Text>
+            )}
 
-            <TouchableOpacity 
-              style={styles.splitButton}
-              onPress={handleSplitBill}
-            >
-              <Text style={styles.splitButtonText}>Split Bill</Text>
-            </TouchableOpacity>
-
-            {splitComplete && (
-              <TouchableOpacity 
-                style={styles.shareButton}
-                onPress={shareGuestList}
-              >
-                <Text style={styles.shareButtonText}>Share Bill Split</Text>
-              </TouchableOpacity>
+            {hasTipInteraction && (
+              <BillSummary
+                bill={bill}
+                formatCurrency={formatCurrency}
+                handleSplitBill={handleSplitBill}
+                splitComplete={splitComplete}
+                shareGuestList={shareGuestList}
+              />
             )}
           </>
         )}
@@ -548,273 +458,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
   },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#3442C6',
-    marginBottom: 15,
-  },
-  itemsContainer: {
-    marginBottom: 10,
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginBottom: 10,
-  },
-  itemHeaderText: {
-    fontWeight: '600',
-    color: '#666',
-    flex: 1,
-    textAlign: 'center',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
-    alignItems: 'center',
-  },
-  nameContainer: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  itemName: {
-    flex: 1,
-    color: '#333',
-    marginLeft: 5,
-  },
-  nameInput: {
-    flex: 2,
-    borderWidth: 1,
-    borderColor: '#3442C6',
-    borderRadius: 4,
-    padding: 4,
-    color: '#333',
-    backgroundColor: 'rgba(52, 66, 198, 0.05)',
-  },
-  quantityContainer: {
-    flex: 0.5,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  itemQuantity: {
-    textAlign: 'center',
-    color: '#333',
-  },
-  quantityInput: {
-    flex: 0.5,
-    borderWidth: 1,
-    borderColor: '#3442C6',
-    borderRadius: 4,
-    padding: 4,
-    textAlign: 'center',
-    color: '#333',
-    backgroundColor: 'rgba(52, 66, 198, 0.05)',
-  },
-  priceContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  itemPrice: {
-    color: '#333',
-    fontWeight: '500',
-    textAlign: 'right',
-  },
-  editIcon: {
-    padding: 2,
-    marginRight: 5,
-  },
-  priceInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#3442C6',
-    borderRadius: 4,
-    padding: 4,
-    textAlign: 'right',
-    color: '#333',
-    backgroundColor: 'rgba(52, 66, 198, 0.05)',
-  },
-  addItemButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 5,
-    marginTop: 5,
-    marginHorizontal: 40,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: '#3442C6',
-    borderRadius: 8,
-    backgroundColor: 'rgba(52, 66, 198, 0.05)',
-  },
-  addItemText: {
-    marginLeft: 6,
-    color: '#3442C6',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  // New Tip Section Styles
-  tipButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    flexWrap: 'wrap',
-  },
-  tipButton: {
-    flex: 1,
-    minWidth: 70,
-    paddingVertical: 10,
-    paddingHorizontal: 5,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    marginHorizontal: 2,
-    marginBottom: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tipButtonSelected: {
-    backgroundColor: '#3442C6',
-  },
-  tipButtonText: {
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#333',
-  },
-  tipButtonTextSelected: {
-    color: 'white',
-  },
-  customTipContainer: {
-    flex: 1,
-    minWidth: 80,
-    marginHorizontal: 2,
-  },
-  customTipButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 5,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-  },
-  customTipText: {
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#333',
-  },
-  tipEditIcon: {
-    marginLeft: 5,
-  },
-  customTipInput: {
-    borderWidth: 1,
-    borderColor: '#3442C6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    backgroundColor: 'rgba(52, 66, 198, 0.05)',
-  },
-  tipCalculationText: {
-    textAlign: 'center',
-    color: '#666',
-    marginTop: 10,
-    fontSize: 14,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    color: '#666',
-  },
-  summaryValue: {
-    color: '#333',
-    fontWeight: '500',
-  },
-  totalRow: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  totalLabel: {
-    color: '#3442C6',
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  totalValue: {
-    color: '#3442C6',
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  splitButton: {
-    backgroundColor: '#4CDE80',
-    paddingVertical: 18,
-    borderRadius: 30,
-    alignItems: 'center',
-    marginBottom: 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  splitButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 18,
-  },
   errorText: {
     color: 'white',
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 20,
     paddingHorizontal: 30,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 30,
-  },
-  errorTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: 'white',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  errorSubtext: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 40,
   },
   tryAgainButton: {
     backgroundColor: 'white',
@@ -833,27 +482,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 18,
   },
-  tipPrompt: {
-    textAlign: 'center',
-    color: '#666',
-    marginTop: 20,
-    marginBottom: 40,
-    fontSize: 16,
-    fontStyle: 'italic',
-  },
-  confirmItemsButton: {
-    backgroundColor: '#FFD700',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 15,
-    marginHorizontal: 40,
-  },
-  confirmItemsText: {
-    color: '#333',
-    fontWeight: '600',
-    fontSize: 16,
-  },
   confirmPrompt: {
     textAlign: 'center',
     color: '#666',
@@ -861,25 +489,5 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     fontSize: 16,
     fontStyle: 'italic',
-  },
-  shareButton: {
-    backgroundColor: '#3442C6',
-    paddingVertical: 18,
-    borderRadius: 30,
-    alignItems: 'center',
-    marginBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  shareButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 18,
-    marginLeft: 8,
   },
 }); 
