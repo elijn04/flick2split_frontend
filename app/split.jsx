@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -9,11 +9,15 @@ import {
   Modal,
   ScrollView,
   Alert,
-  Share
+  Share,
+  Animated,
+  Easing,
+  SafeAreaView
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function SplitBill() {
   const router = useRouter();
@@ -34,6 +38,18 @@ export default function SplitBill() {
   const [splitModalVisible, setSplitModalVisible] = useState(false);
   const [itemToSplit, setItemToSplit] = useState(null);
   const [splitCount, setSplitCount] = useState('2');
+  const [helpVisible, setHelpVisible] = useState(false);
+  
+  // Add animation values
+  const celebrationScale = useRef(new Animated.Value(0)).current;
+  const celebrationOpacity = useRef(new Animated.Value(0)).current;
+  const confettiY = useRef(new Animated.Value(-100)).current;
+  const confettiX = useRef(Array(20).fill().map(() => new Animated.Value(0))).current;
+  
+  // Help modal toggle
+  const toggleHelp = () => {
+    setHelpVisible(!helpVisible);
+  };
   
   // Initialize available items from bill data and recalculate subtotal
   useEffect(() => {
@@ -214,7 +230,7 @@ export default function SplitBill() {
   };
   
   const formatCurrency = (amount) => {
-    return `$${parseFloat(amount).toFixed(2)}`;
+    return parseFloat(amount).toFixed(2);
   };
   
   // Format guest details for sharing
@@ -270,6 +286,53 @@ export default function SplitBill() {
     }
   };
   
+  // Add animation function
+  const playCelebrationAnimation = () => {
+    // Reset animation values
+    celebrationScale.setValue(0);
+    celebrationOpacity.setValue(0);
+    confettiY.setValue(-100);
+    confettiX.forEach(x => x.setValue(Math.random() * 300 - 150));
+    
+    // Play animations
+    Animated.parallel([
+      Animated.timing(celebrationScale, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        easing: Easing.elastic(1.2),
+      }),
+      Animated.timing(celebrationOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(confettiY, {
+        toValue: 400,
+        duration: 2000,
+        useNativeDriver: true,
+      }),
+      ...confettiX.map(x => 
+        Animated.sequence([
+          Animated.delay(Math.random() * 500),
+          Animated.timing(x, {
+            toValue: Math.random() * 100 - 50,
+            duration: 2000,
+            useNativeDriver: true,
+            easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+          })
+        ])
+      )
+    ]).start();
+  };
+  
+  // Trigger animation when all items are assigned
+  useEffect(() => {
+    if (availableItems.length === 0 && previousGuests.length > 0) {
+      playCelebrationAnimation();
+    }
+  }, [availableItems.length, previousGuests.length]);
+  
   if (!billData) {
     return (
       <View style={styles.container}>
@@ -286,218 +349,324 @@ export default function SplitBill() {
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
-      <View style={styles.backgroundElements}>
-        <View style={styles.circle1} />
-        <View style={styles.circle2} />
-      </View>
-      
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButtonSmall}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Split Bill</Text>
-      </View>
+    <>
+      <LinearGradient
+        colors={['#3442C6', '#5B42E8', '#7451FB', '#8360FF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <StatusBar style="light" />
+          
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButtonSmall}
+              onPress={() => router.back()}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Split Bill</Text>
+          </View>
 
-      <ScrollView style={styles.content}>
-        {availableItems.length > 0 ? (
-          // Show guest name input or item selection only if there are items left
-          showNameInput ? (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Enter Guest Name</Text>
-              <TextInput
-                style={styles.nameInput}
-                value={guestName}
-                onChangeText={setGuestName}
-                placeholder="Guest Name"
-                placeholderTextColor="#999"
-                autoFocus
-              />
-              <TouchableOpacity 
-                style={styles.nextButton}
-                onPress={handleNextAfterName}
-              >
-                <Text style={styles.nextButtonText}>Next</Text>
-              </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.helpButton}
+            onPress={toggleHelp}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="help-circle" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Help Modal */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={helpVisible}
+            onRequestClose={toggleHelp}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>How to Split Your Bill</Text>
+                
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>1. Enter Names</Text>
+                  <Text style={styles.helpText}>Start by entering each person's name who shared the bill.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>2. Select Items</Text>
+                  <Text style={styles.helpText}>Select the items each person ordered from the available items list.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>3. Split Shared Items</Text>
+                  <Text style={styles.helpText}>Use the split button (branch icon) if an item was shared between multiple people.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>4. Repeat for Everyone</Text>
+                  <Text style={styles.helpText}>Confirm each person's items and repeat until all items are assigned.</Text>
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={toggleHelp}
+                >
+                  <Text style={styles.closeButtonText}>Got it!</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          ) : (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Select Items for {guestName}</Text>
-              
-              {availableItems.length === 0 ? (
-                <Text style={styles.noItemsText}>No items available</Text>
+          </Modal>
+
+          <ScrollView style={styles.content}>
+            {availableItems.length > 0 ? (
+              // Show guest name input or item selection only if there are items left
+              showNameInput ? (
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>Enter Guest Name</Text>
+                  <TextInput
+                    style={styles.nameInput}
+                    value={guestName}
+                    onChangeText={setGuestName}
+                    placeholder="Guest Name"
+                    placeholderTextColor="#999"
+                    autoFocus
+                  />
+                  <TouchableOpacity 
+                    style={styles.nextButton}
+                    onPress={handleNextAfterName}
+                  >
+                    <Text style={styles.nextButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
-                <FlatList
-                  data={availableItems}
-                  keyExtractor={item => item.id}
-                  renderItem={({ item }) => (
+                <View style={styles.card}>
+                  <Text style={styles.sectionTitle}>Select Items for {guestName}</Text>
+                  
+                  {availableItems.length === 0 ? (
+                    <Text style={styles.noItemsText}>No items available</Text>
+                  ) : (
+                    <FlatList
+                      data={availableItems}
+                      keyExtractor={item => item.id}
+                      renderItem={({ item }) => (
+                        <TouchableOpacity 
+                          style={[
+                            styles.itemRow,
+                            selectedItems.some(i => i.id === item.id) && styles.selectedItem
+                          ]}
+                          onPress={() => toggleItemSelection(item.id)}
+                        >
+                          <View style={styles.itemNameContainer}>
+                            <Text style={styles.itemName}>{item.name}</Text>
+                            {selectedItems.some(i => i.id === item.id) && (
+                              <Ionicons name="checkmark-circle" size={18} color="#4CDE80" style={styles.checkmark} />
+                            )}
+                          </View>
+                          <View style={styles.itemPriceContainer}>
+                            <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
+                            {!item.isSplit && (
+                              <TouchableOpacity 
+                                style={styles.splitButton}
+                                onPress={() => openSplitModal(item)}
+                              >
+                                <Ionicons name="git-branch-outline" size={18} color="#3442C6" />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      )}
+                      scrollEnabled={false}
+                      style={styles.itemsList}
+                    />
+                  )}
+                  
+                  <View style={styles.buttonContainer}>
                     <TouchableOpacity 
-                      style={[
-                        styles.itemRow,
-                        selectedItems.some(i => i.id === item.id) && styles.selectedItem
-                      ]}
-                      onPress={() => toggleItemSelection(item.id)}
+                      style={styles.confirmButton}
+                      onPress={confirmGuestItems}
                     >
-                      <View style={styles.itemNameContainer}>
-                        <Text style={styles.itemName}>{item.name}</Text>
-                        {selectedItems.some(i => i.id === item.id) && (
-                          <Ionicons name="checkmark-circle" size={18} color="#4CDE80" style={styles.checkmark} />
-                        )}
-                      </View>
-                      <View style={styles.itemPriceContainer}>
-                        <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
-                        {!item.isSplit && (
-                          <TouchableOpacity 
-                            style={styles.splitButton}
-                            onPress={() => openSplitModal(item)}
-                          >
-                            <Ionicons name="git-branch-outline" size={18} color="#3442C6" />
-                          </TouchableOpacity>
-                        )}
+                      <Text style={styles.confirmButtonText}>Confirm Items</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )
+            ) : (
+              // Animated celebration card
+              <View style={styles.card}>
+                <View style={styles.celebrationContainer}>
+                  {/* Confetti particles */}
+                  {confettiX.map((x, index) => (
+                    <Animated.View 
+                      key={index}
+                      style={[
+                        styles.confetti,
+                        {
+                          backgroundColor: ['#FF9500', '#4CDE80', '#3442C6', '#FFD54F', '#FF4F66'][index % 5],
+                          transform: [
+                            { translateY: confettiY },
+                            { translateX: x },
+                            { rotate: `${index * 30}deg` }
+                          ],
+                          opacity: celebrationOpacity
+                        }
+                      ]}
+                    />
+                  ))}
+                  
+                  {/* Success checkmark */}
+                  <Animated.View style={{
+                    transform: [{ scale: celebrationScale }],
+                    opacity: celebrationOpacity
+                  }}>
+                    <View style={styles.successCircle}>
+                      <Ionicons name="checkmark" size={40} color="white" />
+                    </View>
+                  </Animated.View>
+                </View>
+                
+                <Animated.Text 
+                  style={[
+                    styles.sectionTitle, 
+                    { 
+                      opacity: celebrationOpacity,
+                      transform: [{ scale: Animated.add(0.8, Animated.multiply(celebrationScale, 0.2)) }]
+                    }
+                  ]}
+                >
+                  Bill Split Complete!
+                </Animated.Text>
+                
+                <Animated.Text 
+                  style={[
+                    styles.completionText,
+                    { opacity: celebrationOpacity }
+                  ]}
+                >
+                  All items have been assigned to guests. Review the guest totals below.
+                </Animated.Text>
+                
+                <TouchableOpacity 
+                  style={styles.shareButton}
+                  onPress={handleShare}
+                >
+                  <Text style={styles.shareButtonText}>Share Split Details</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Previous Guests Summary - always show this section */}
+            {previousGuests.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>Guest Totals</Text>
+                {[...previousGuests].reverse().map((guest, index) => (
+                  <View key={index} style={styles.guestSummary}>
+                    <TouchableOpacity 
+                      style={styles.guestSummaryHeader}
+                      onPress={() => toggleGuestDetails(index)}
+                    >
+                      <Text style={styles.guestName}>{guest.name}</Text>
+                      <View style={styles.guestTotalContainer}>
+                        <Text style={styles.guestTotal}>
+                          Total: {formatCurrency(guest.total)}
+                        </Text>
+                        <Ionicons 
+                          name={expandedGuest === index ? "chevron-up" : "chevron-down"} 
+                          size={18} 
+                          color="#666"
+                        />
                       </View>
                     </TouchableOpacity>
-                  )}
-                  scrollEnabled={false}
-                  style={styles.itemsList}
-                />
-              )}
-              
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={styles.confirmButton}
-                  onPress={confirmGuestItems}
-                >
-                  <Text style={styles.confirmButtonText}>Confirm Items</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )
-        ) : (
-          // Show completion message when all items are assigned
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Bill Split Complete</Text>
-            <Text style={styles.completionText}>
-              All items have been assigned to guests. Review the guest totals below.
-            </Text>
-            <TouchableOpacity 
-              style={styles.shareButton}
-              onPress={handleShare}
-            >
-              <Text style={styles.shareButtonText}>Share Split Details</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Previous Guests Summary - always show this section */}
-        {previousGuests.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Guest Totals</Text>
-            {[...previousGuests].reverse().map((guest, index) => (
-              <View key={index} style={styles.guestSummary}>
-                <TouchableOpacity 
-                  style={styles.guestSummaryHeader}
-                  onPress={() => toggleGuestDetails(index)}
-                >
-                  <Text style={styles.guestName}>{guest.name}</Text>
-                  <View style={styles.guestTotalContainer}>
-                    <Text style={styles.guestTotal}>
-                      Total: {formatCurrency(guest.total)}
-                    </Text>
-                    <Ionicons 
-                      name={expandedGuest === index ? "chevron-up" : "chevron-down"} 
-                      size={18} 
-                      color="#666"
-                    />
-                  </View>
-                </TouchableOpacity>
-                
-                {expandedGuest === index && (
-                  <View style={styles.guestDetails}>
-                    {guest.items.map((item, itemIndex) => (
-                      <View key={itemIndex} style={styles.guestItemRow}>
-                        <Text style={styles.guestItemName}>{item.name}</Text>
-                        <Text style={styles.guestItemPrice}>{formatCurrency(item.price)}</Text>
+                    
+                    {expandedGuest === index && (
+                      <View style={styles.guestDetails}>
+                        {guest.items.map((item, itemIndex) => (
+                          <View key={itemIndex} style={styles.guestItemRow}>
+                            <Text style={styles.guestItemName}>{item.name}</Text>
+                            <Text style={styles.guestItemPrice}>{formatCurrency(item.price)}</Text>
+                          </View>
+                        ))}
+                        
+                        <View style={styles.guestItemDivider} />
+                        
+                        <View style={styles.guestItemRow}>
+                          <Text style={styles.guestItemSubtotal}>Subtotal</Text>
+                          <Text style={styles.guestItemSubtotalPrice}>{formatCurrency(guest.subtotal)}</Text>
+                        </View>
+                        
+                        <View style={styles.guestItemRow}>
+                          <Text style={styles.guestItemName}>Tax</Text>
+                          <Text style={styles.guestItemPrice}>{formatCurrency(guest.tax)}</Text>
+                        </View>
+                        
+                        <View style={styles.guestItemRow}>
+                          <Text style={styles.guestItemName}>Tip</Text>
+                          <Text style={styles.guestItemPrice}>{formatCurrency(guest.tip)}</Text>
+                        </View>
+                        
+                        <View style={styles.guestItemDivider} />
+                        
+                        <View style={styles.guestItemRow}>
+                          <Text style={styles.guestItemTotal}>Total</Text>
+                          <Text style={styles.guestItemTotalPrice}>{formatCurrency(guest.total)}</Text>
+                        </View>
                       </View>
-                    ))}
-                    
-                    <View style={styles.guestItemDivider} />
-                    
-                    <View style={styles.guestItemRow}>
-                      <Text style={styles.guestItemSubtotal}>Subtotal</Text>
-                      <Text style={styles.guestItemSubtotalPrice}>{formatCurrency(guest.subtotal)}</Text>
-                    </View>
-                    
-                    <View style={styles.guestItemRow}>
-                      <Text style={styles.guestItemName}>Tax</Text>
-                      <Text style={styles.guestItemPrice}>{formatCurrency(guest.tax)}</Text>
-                    </View>
-                    
-                    <View style={styles.guestItemRow}>
-                      <Text style={styles.guestItemName}>Tip</Text>
-                      <Text style={styles.guestItemPrice}>{formatCurrency(guest.tip)}</Text>
-                    </View>
-                    
-                    <View style={styles.guestItemDivider} />
-                    
-                    <View style={styles.guestItemRow}>
-                      <Text style={styles.guestItemTotal}>Total</Text>
-                      <Text style={styles.guestItemTotalPrice}>{formatCurrency(guest.total)}</Text>
-                    </View>
+                    )}
                   </View>
-                )}
+                ))}
               </View>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-      
-      {/* Split Modal */}
-      <Modal
-        visible={splitModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setSplitModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Split how many ways?</Text>
-            <TextInput
-              style={styles.splitInput}
-              value={splitCount}
-              onChangeText={setSplitCount}
-              keyboardType="numeric"
-              autoFocus
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.modalCancelButton}
-                onPress={() => setSplitModalVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalConfirmButton}
-                onPress={handleSplitItem}
-              >
-                <Text style={styles.modalConfirmText}>Split</Text>
-              </TouchableOpacity>
+            )}
+          </ScrollView>
+          
+          {/* Split Modal */}
+          <Modal
+            visible={splitModalVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setSplitModalVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Split how many ways?</Text>
+                <TextInput
+                  style={styles.splitInput}
+                  value={splitCount}
+                  onChangeText={setSplitCount}
+                  keyboardType="numeric"
+                  autoFocus
+                />
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity 
+                    style={styles.modalCancelButton}
+                    onPress={() => setSplitModalVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.modalConfirmButton}
+                    onPress={handleSplitItem}
+                  >
+                    <Text style={styles.modalConfirmText}>Split</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </View>
+          </Modal>
         </View>
-      </Modal>
-    </View>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#3442C6',
-    paddingTop: 60,
+    backgroundColor: 'transparent',
+    paddingTop: 30,
   },
   backgroundElements: {
     position: 'absolute',
@@ -507,37 +676,21 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: -1,
   },
-  circle1: {
-    position: 'absolute',
-    width: 500,
-    height: 500,
-    borderRadius: 250,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    top: -200,
-    left: -100,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    bottom: -150,
-    right: -100,
-  },
   header: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    paddingTop: 10,
+    paddingTop: 0,
+    height: 40,
   },
   backButtonSmall: {
     position: 'absolute',
     left: 20,
     padding: 5,
+    zIndex: 1,
   },
   title: {
     fontSize: 24,
@@ -721,22 +874,62 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 20,
   },
   modalContent: {
     backgroundColor: 'white',
+    padding: 30,
     borderRadius: 20,
-    padding: 20,
-    width: '80%',
-    alignItems: 'center',
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 25,
     color: '#3442C6',
-    marginBottom: 20,
+    textAlign: 'center',
+  },
+  helpSection: {
+    marginBottom: 22,
+    width: '100%',
+  },
+  helpSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#3442C6',
+  },
+  helpText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#444',
+  },
+  closeButton: {
+    backgroundColor: '#3442C6',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    textAlign: 'center',
   },
   splitInput: {
     borderWidth: 1,
@@ -821,4 +1014,50 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  helpButton: {
+    position: 'absolute',
+    top: 20,
+    right: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  celebrationContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 200,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  confetti: {
+    position: 'absolute',
+    width: 15,
+    height: 15,
+    borderRadius: 3,
+    top: 0,
+    left: '50%',
+    zIndex: 1,
+  },
+  successCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#4CDE80',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 4,
+    borderColor: 'white',
+    marginBottom: 20,
+  },
 }); 
+

@@ -1,11 +1,13 @@
-import { Text, View, TouchableOpacity, StyleSheet, Image, Alert, Dimensions, ActivityIndicator } from "react-native";
-import { useState, useEffect } from "react";
+import { Text, View, TouchableOpacity, StyleSheet, Image, Alert, Dimensions, ActivityIndicator, Modal, Animated } from "react-native";
+import { useState, useEffect, useRef } from "react";
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native';
 
 
 const { width } = Dimensions.get('window');
@@ -19,7 +21,164 @@ export default function Index() {
   const [buttonState, setButtonState] = useState("idle");
   const [image, setImage] = useState(null);
   const [responseData, setResponseData] = useState(null);
+  const [helpVisible, setHelpVisible] = useState(false);
   const router = useRouter();
+  
+  // Animation values
+  const circle1Animation = useRef(new Animated.Value(0)).current;
+  const circle2Animation = useRef(new Animated.Value(0)).current;
+  const circle3Animation = useRef(new Animated.Value(0)).current;
+  const buttonPulse = useRef(new Animated.Value(1)).current;
+  
+  // Add shimmer animation for title
+  const shimmerAnimation = useRef(new Animated.Value(0)).current;
+  
+  // Start background animations
+  useEffect(() => {
+    const animateCircles = () => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(circle1Animation, {
+            toValue: 1,
+            duration: 15000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(circle1Animation, {
+            toValue: 0,
+            duration: 15000,
+            useNativeDriver: true,
+          })
+        ])
+      ).start();
+      
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(circle2Animation, {
+            toValue: 1,
+            duration: 18000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(circle2Animation, {
+            toValue: 0,
+            duration: 18000,
+            useNativeDriver: true,
+          })
+        ])
+      ).start();
+      
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(circle3Animation, {
+            toValue: 1,
+            duration: 20000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(circle3Animation, {
+            toValue: 0,
+            duration: 20000,
+            useNativeDriver: true,
+          })
+        ])
+      ).start();
+    };
+    
+    // Button pulsing animation
+    const pulseButton = () => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(buttonPulse, {
+            toValue: 1.08,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(buttonPulse, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    };
+    
+    animateCircles();
+    pulseButton();
+  }, []);
+  
+  useEffect(() => {
+    // Start shimmer animation for title
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnimation, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnimation, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        })
+      ])
+    ).start();
+  }, []);
+  
+  // Transform animations
+  const circle1Transform = {
+    transform: [
+      {
+        translateY: circle1Animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 30]
+        })
+      },
+      {
+        scale: circle1Animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 1.1]
+        })
+      }
+    ],
+  };
+  
+  const circle2Transform = {
+    transform: [
+      {
+        translateX: circle2Animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -20]
+        })
+      },
+      {
+        scale: circle2Animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 1.15]
+        })
+      }
+    ],
+  };
+  
+  const circle3Transform = {
+    transform: [
+      {
+        translateY: circle3Animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 15]
+        })
+      },
+      {
+        translateX: circle3Animation.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 15]
+        })
+      }
+    ],
+  };
+
+  // Create shimmer effect interpolation
+  const shimmerTranslate = shimmerAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width, width]
+  });
 
   // Reset state on mount/unmount
   useEffect(() => {
@@ -178,167 +337,222 @@ export default function Index() {
   };
 
   /**
-   * Display help information
+   * Toggle help modal visibility
    */
-  const showHelp = () => {
-    Alert.alert(
-      "How to Use Flick2Split",
-      "1. Take a photo of your bill or upload one from your gallery\n\n" +
-      "2. Our app will automatically extract items and prices\n\n" +
-      "3. Assign items to friends and split the bill fairly\n\n" +
-      "If you don't have a bill to scan, use 'Enter Manually' or 'Split Evenly'",
-      [{ text: "Got it!" }]
-    );
+  const toggleHelp = () => {
+    setHelpVisible(!helpVisible);
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
-      <View style={styles.backgroundElements}>
-        <View style={styles.circle1} />
-        <View style={styles.circle2} />
-      </View>
-      
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>FLICK</Text>
-          <Text style={styles.yellowText}>2</Text>
-          <Text style={styles.title}>SPLIT</Text>
-        </View>
-        <Text style={styles.tagline}>the best bill splitting app for friends</Text>
-      </View>
-
-      <TouchableOpacity 
-        style={styles.helpButton}
-        onPress={showHelp}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="help-circle" size={28} color="#FFFFFF" />
-      </TouchableOpacity>
-
-      <View style={styles.content}>
-        {image && (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: image }} style={styles.previewImage} />
-            
-            {/* Title at the top */}
-            <View style={styles.previewTitleContainer}>
-              <Text style={styles.previewText}>Receipt Preview</Text>
-            </View>
-            
-            {/* Retake button at the bottom */}
-            <View style={styles.imageOverlay}>
-              <TouchableOpacity 
-                style={styles.retakeButton}
-                onPress={() => setImage(null)}
-              >
-                <Ionicons name="refresh-outline" size={12} color="white" />
-                <Text style={styles.retakeButtonText}>Retake</Text>
-              </TouchableOpacity>
-            </View>
+    <>
+      <LinearGradient
+        colors={['#3442C6', '#5B42E8', '#7451FB', '#8360FF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <StatusBar style="light" />
+          
+          <View style={styles.backgroundElements}>
+            <Animated.View style={[styles.circle1, circle1Transform]} />
+            <Animated.View style={[styles.circle2, circle2Transform]} />
+            <Animated.View style={[styles.circle3, circle3Transform]} />
+            <View style={styles.glowEffect1} />
+            <View style={[styles.glowEffect2, { opacity: 0.7 }]} />
           </View>
-        )}
-        
-        {!image ? (
-          <>
-            <TouchableOpacity
-              style={[
-                styles.button,
-                buttonState === "loading" && styles.buttonLoading,
-                buttonState === "error" && styles.buttonError,
-              ]}
-              onPress={takePhoto}
-              disabled={buttonState === "loading"}
-              activeOpacity={0.8}
-            >
-              <View style={styles.buttonInner}>
-                <Text style={styles.buttonText}>
-                  {buttonState === "loading" ? "Processing..." : 
-                   buttonState === "error" ? "Error" : "Take Photo"}
-                </Text>
-                {buttonState !== "loading" && buttonState !== "error" && (
-                  <Ionicons name="camera" size={24} color="#3442C6" style={styles.buttonIcon} />
-                )}
+          
+          <View style={styles.header}>
+            <View style={styles.titleContainer}>
+              <Text style={styles.title}>FLICK</Text>
+              <View style={styles.shimmerContainer}>
+                <Text style={styles.yellowText}>2</Text>
+                <Animated.View style={[
+                  styles.shimmerEffect,
+                  { transform: [{ translateX: shimmerTranslate }] }
+                ]} />
               </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                buttonState === "loading" && styles.buttonLoading,
-                buttonState === "error" && styles.buttonError,
-              ]}
-              onPress={pickImage}
-              disabled={buttonState === "loading"}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.secondaryButtonText}>
-                Choose from Gallery
-              </Text>
-            </TouchableOpacity>
-            
-            <Text style={styles.instructions}>Snap a photo of your bill or upload one</Text>
-            
-            <TouchableOpacity
-              style={styles.manualInputButton}
-              onPress={handleManualInput}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.manualInputText}>Having trouble? Enter Manually</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.continueButton,
-              buttonState === "processing" && styles.buttonProcessing,
-              buttonState === "error" && styles.buttonError,
-            ]}
-            onPress={handleContinue}
-            disabled={buttonState === "processing"}
-            activeOpacity={0.8}
-          >
-            {buttonState === "processing" ? (
-              <View style={styles.processingContainer}>
-                <ActivityIndicator color="#ffffff" size="small" />
-                <Text style={styles.continueButtonText}> Processing...</Text>
-              </View>
-            ) : (
-              <Text style={styles.continueButtonText}>Continue</Text>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+              <Text style={styles.title}>SPLIT</Text>
+            </View>
+            <Text style={styles.tagline}>The best way to split with friends</Text>
+          </View>
 
-      {/* Fixed bottom button */}
-      {!image && (
-        <View style={styles.bottomButtonContainer}>
-          <TouchableOpacity
-            style={styles.bottomFullButton}
-            onPress={() => router.push('/split-evenly')}
-            activeOpacity={0.8}
+          <TouchableOpacity 
+            style={styles.helpButton}
+            onPress={toggleHelp}
+            activeOpacity={0.7}
           >
-            <View style={styles.bottomButtonContent}>
-              <Ionicons name="people" size={22} color="white" style={styles.bottomButtonIcon} />
-              <View style={styles.bottomButtonTextContainer}>
-                <Text style={styles.bottomButtonText}>Split Evenly</Text>
-                <Text style={styles.bottomButtonSubtext}>Everyone pays same amount</Text>
+            <Ionicons name="help-circle" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Help Modal */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={helpVisible}
+            onRequestClose={toggleHelp}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>How to Use Flick2Split</Text>
+                
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>1. Take a Photo</Text>
+                  <Text style={styles.helpText}>Take a photo of your bill or upload one from your gallery.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>2. Review Items</Text>
+                  <Text style={styles.helpText}>Our app will automatically extract items and prices for you to review.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>3. Split the Bill</Text>
+                  <Text style={styles.helpText}>Assign items to friends and split the bill fairly based on what each person ordered.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>4. No Internet?</Text>
+                  <Text style={styles.helpText}>If you don't have service/wifi, use the "Enter Manually" option to input bill details yourself.</Text>
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={toggleHelp}
+                >
+                  <Text style={styles.closeButtonText}>Got it!</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          </TouchableOpacity>
+          </Modal>
+
+          <View style={styles.content}>
+            {image && (
+              <View style={styles.imagePreview}>
+                <Image source={{ uri: image }} style={styles.previewImage} />
+                
+                {/* Title at the top */}
+                <View style={styles.previewTitleContainer}>
+                  <Text style={styles.previewText}>Receipt Preview</Text>
+                </View>
+                
+                {/* Retake button at the bottom */}
+                <View style={styles.imageOverlay}>
+                  <TouchableOpacity 
+                    style={styles.retakeButton}
+                    onPress={() => setImage(null)}
+                  >
+                    <Ionicons name="refresh-outline" size={12} color="white" />
+                    <Text style={styles.retakeButtonText}>Retake</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+            
+            {!image ? (
+              <>
+                <Animated.View style={{ transform: [{ scale: buttonPulse }], width: '100%', alignItems: 'center' }}>
+                  <View style={styles.buttonGlow}></View>
+                  <TouchableOpacity
+                    style={[
+                      styles.button,
+                      buttonState === "loading" && styles.buttonLoading,
+                      buttonState === "error" && styles.buttonError,
+                    ]}
+                    onPress={takePhoto}
+                    disabled={buttonState === "loading"}
+                    activeOpacity={0.7}
+                  >
+                    <LinearGradient
+                      colors={['#ffffff', '#ffffff', '#f8f8f8']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.buttonGradient}
+                    />
+                    <View style={styles.buttonInner}>
+                      <Text style={styles.buttonText}>
+                        {buttonState === "loading" ? "Processing..." : 
+                         buttonState === "error" ? "Error" : "Take Photo"}
+                      </Text>
+                      {buttonState !== "loading" && buttonState !== "error" && (
+                        <Ionicons name="camera" size={28} color="#3442C6" style={styles.buttonIcon} />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryButton,
+                    buttonState === "loading" && styles.buttonLoading,
+                    buttonState === "error" && styles.buttonError,
+                  ]}
+                  onPress={pickImage}
+                  disabled={buttonState === "loading"}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Choose from Gallery
+                  </Text>
+                </TouchableOpacity>
+                
+                <Text style={styles.instructions}>Snap a photo of your bill or upload one</Text>
+                
+                <TouchableOpacity
+                  style={styles.manualInputButton}
+                  onPress={handleManualInput}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.manualInputText}>Having trouble? Enter Manually</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.continueButton,
+                  buttonState === "processing" && styles.buttonProcessing,
+                  buttonState === "error" && styles.buttonError,
+                ]}
+                onPress={handleContinue}
+                disabled={buttonState === "processing"}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#4CDE80', '#3ED573', '#38C56B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.continueButtonGradient}
+                />
+                {buttonState === "processing" ? (
+                  <View style={styles.processingContainer}>
+                    <ActivityIndicator color="#ffffff" size="small" />
+                    <Text style={styles.continueButtonText}> Processing...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.continueButtonText}>Continue</Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      )}
-    </View>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  backgroundGradient: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     justifyContent: "space-between",
     paddingVertical: 60,
     paddingHorizontal: 20,
-    backgroundColor: "#3442C6", // Slightly darker blue
     position: 'relative',
     overflow: 'hidden',
   },
@@ -355,7 +569,7 @@ const styles = StyleSheet.create({
     width: width * 1.2,
     height: width * 1.2,
     borderRadius: width * 0.6,
-    backgroundColor: 'rgba(80, 130, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     top: -width * 0.8,
     left: -width * 0.3,
   },
@@ -364,9 +578,44 @@ const styles = StyleSheet.create({
     width: width,
     height: width,
     borderRadius: width * 0.5,
-    backgroundColor: 'rgba(110, 80, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     bottom: -width * 0.5,
     right: -width * 0.3,
+  },
+  circle3: {
+    position: 'absolute',
+    width: width * 0.8,
+    height: width * 0.8,
+    borderRadius: width * 0.4,
+    backgroundColor: 'rgba(80, 130, 255, 0.15)',
+    top: width * 0.4,
+    left: -width * 0.4,
+  },
+  glowEffect1: {
+    position: 'absolute',
+    width: width * 0.7,
+    height: width * 0.7,
+    borderRadius: width * 0.35,
+    backgroundColor: 'rgba(255, 223, 0, 0.08)',
+    top: width * 0.2,
+    right: -width * 0.35,
+    shadowColor: "#FFDF00",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+  },
+  glowEffect2: {
+    position: 'absolute',
+    width: width * 0.5,
+    height: width * 0.5,
+    borderRadius: width * 0.25,
+    backgroundColor: 'rgba(76, 222, 128, 0.1)',
+    bottom: width * 0.2,
+    left: width * 0.25,
+    shadowColor: "#4CDE80",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
   },
   header: {
     alignItems: "center",
@@ -381,16 +630,17 @@ const styles = StyleSheet.create({
     fontSize: 50,
     fontWeight: "900",
     color: "white",
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowColor: 'rgba(0, 0, 0, 0.69)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 10,
     letterSpacing: 1.5,
+    
   },
   yellowText: {
     fontSize: 60,
     fontWeight: "900",
     color: "#FFDF00", // Bright yellow color
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowColor: 'rgba(0, 0, 0, 0.74)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 10,
     letterSpacing: 1.5,
@@ -401,6 +651,9 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     textAlign: 'center',
     fontWeight: '500',
+    textShadowColor: 'rgba(0, 0, 0, 0.74)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
   },
   content: {
     flex: 1,
@@ -408,30 +661,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: '100%',
     paddingTop: 25,
+    
   },
   button: {
     backgroundColor: "white",
     paddingVertical: 35,
     paddingHorizontal: 30,
     borderRadius: 30,
-    elevation: 10,
+    elevation: 6,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
     marginBottom: 25,
-    marginTop: 45,
+    marginTop: 100,
     width: '90%',
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ scale: 1.02 }],
+    transform: [{ scale: 1 }],
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    overflow: 'hidden',
   },
   secondaryButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingVertical: 20,
     paddingHorizontal: 30,
     borderRadius: 30,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.8)',
     marginBottom: 30,
     shadowColor: "#000",
@@ -443,25 +700,27 @@ const styles = StyleSheet.create({
     backdropFilter: 'blur(10px)',
   },
   continueButton: {
-    backgroundColor: "#4CDE80", // Green color for continue
-    paddingVertical: 18, // Even shorter padding
-    paddingHorizontal: 45, // Reduced padding further
+    paddingVertical: 18,
+    paddingHorizontal: 45,
     borderRadius: 30,
     elevation: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    marginTop: 8, // Reduced margin more
-    width: '85%', // Kept the width
+    marginTop: 8,
+    width: '85%',
     alignItems: 'center',
     transform: [{ scale: 1.02 }],
+    borderWidth: 1.5,
+    borderColor: 'rgba(76, 222, 128, 0.5)',
+    overflow: 'hidden',
   },
   buttonLoading: {
     backgroundColor: "rgba(255, 255, 255, 0.7)",
   },
   buttonProcessing: {
-    backgroundColor: "rgba(76, 222, 128, 0.7)",
+    opacity: 0.8,
   },
   buttonError: {
     backgroundColor: "rgba(255, 100, 100, 0.9)",
@@ -471,17 +730,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+    paddingHorizontal: 5,
   },
   buttonText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "800",
     color: "#3442C6",
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   secondaryButtonText: {
     fontSize: 18,
     fontWeight: "700",
     color: "white",
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   continueButtonText: {
     fontSize: 20,
@@ -591,45 +855,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  bottomButtonContainer: {
-    position: 'absolute',
-    bottom: 45,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    paddingHorizontal: 30,
-    zIndex: 5,
-  },
-  bottomFullButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingVertical: 16,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.5)",
-    width: '84%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  bottomButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  bottomButtonSubtext: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 13,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  buttonIcon: {
-    marginLeft: 10,
-  },
   helpButton: {
     position: 'absolute',
     top: 20,
@@ -642,17 +867,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
-  bottomButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  bottomButtonIcon: {
-    marginRight: 12,
-  },
-  bottomButtonTextContainer: {
-    alignItems: 'flex-start',
+  buttonIcon: {
+    marginLeft: 12,
   },
   previewTitleContainer: {
     position: 'absolute',
@@ -663,5 +879,66 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 30,
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 25,
+    color: '#3442C6',
+    textAlign: 'center',
+  },
+  helpSection: {
+    marginBottom: 22,
+    width: '100%',
+  },
+  helpSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#3442C6',
+  },
+  helpText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#444',
+  },
+  closeButton: {
+    backgroundColor: '#3442C6',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    textAlign: 'center',
   },
 });

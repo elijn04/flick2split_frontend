@@ -1,54 +1,81 @@
-import { Text, View, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Share } from "react-native";
-import { useState, useEffect } from "react";
+import { Text, View, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, Share, SafeAreaView } from "react-native";
+import { useState } from "react";
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { formatCurrency, currencies } from './utils/currencies';
+import { useCurrencyConverter, CurrencyConverterButton, CurrencyConverterModal } from "./CurrencyConverter";
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function SplitEvenly() {
-  const [subtotal, setSubtotal] = useState('');
-  const [tax, setTax] = useState('');
-  const [selectedTip, setSelectedTip] = useState(null); // Changed to null as initial state
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const billData = params.billData ? JSON.parse(params.billData) : null;
+  
   const [numPeople, setNumPeople] = useState('2');
+  const [selectedTip, setSelectedTip] = useState(null);
   const [customTipAmount, setCustomTipAmount] = useState('');
   const [isCustomTip, setIsCustomTip] = useState(false);
-  const router = useRouter();
   
-  // Calculate totals immediately
-  const subtotalValue = parseFloat(subtotal) || 0;
-  const taxValue = parseFloat(tax) || 0;
-  let tipValue = 0;
+  // Use the passed bill data
+  const subtotalValue = billData?.subtotal || 0;
+  const taxValue = billData?.tax || 0;
+  let tipValue = billData?.tip || 0;
+  const currencySymbol = billData?.currency_symbol || '$';
+  const currencyCode = billData?.currency_code || 'USD';
   
-  // Calculate tip based on percentage or custom amount
-  if (isCustomTip) {
-    tipValue = parseFloat(customTipAmount) || 0;
-  } else {
-    tipValue = subtotalValue * (selectedTip / 100);
-  }
+  const {
+    showCurrencyModal,
+    setShowCurrencyModal,
+    originalCurrency,
+    setOriginalCurrency,
+    targetCurrency, 
+    setTargetCurrency,
+    exchangeRate,
+    showOriginalDropdown,
+    setShowOriginalDropdown,
+    showTargetDropdown,
+    setShowTargetDropdown,
+    originalSearchQuery,
+    setOriginalSearchQuery,
+    targetSearchQuery,
+    setTargetSearchQuery,
+    convertCurrency
+  } = useCurrencyConverter(currencyCode);
   
   const totalValue = subtotalValue + taxValue + tipValue;
   const perPersonAmount = totalValue / (parseInt(numPeople) || 1);
   
-  // Check if summary should be shown (only after tip is selected)
-  const showSummary = selectedTip !== null || isCustomTip;
+  // Helper function to get currency symbol
+  const getCurrencySymbol = (currencyCode) => {
+    const currency = currencies.find(c => c.code === currencyCode);
+    return currency ? currency.symbol : '$';
+  };
   
-  // Auto-calculate on input changes
-  useEffect(() => {
-    // No need for additional action as we calculate values immediately
-  }, [subtotal, tax, selectedTip, numPeople]);
+  // Custom function to format currency with the bill's currency symbol
+  const formatBillCurrency = (amount) => {
+    // If using the currency converter, use the utility function
+    if (targetCurrency !== originalCurrency) {
+      // Convert the amount using the exchange rate
+      const convertedAmount = amount * exchangeRate;
+      // Get the target currency symbol
+      const symbol = getCurrencySymbol(targetCurrency);
+      // Return formatted amount with the target currency symbol
+      return `${symbol}${parseFloat(convertedAmount).toFixed(2)}`;
+    }
+    // Otherwise just return the number without currency symbol
+    return parseFloat(amount).toFixed(2);
+  };
   
   // Format message for sharing
   const formatDetailsForSharing = () => {
-    const tipDescription = isCustomTip 
-      ? `Tip: $${tipValue.toFixed(2)}`
-      : `Tip (${selectedTip}%): $${tipValue.toFixed(2)}`;
-      
     return `💰 PAYMENT REQUEST 💰\n\n` +
-           `You guys all owe me $${perPersonAmount.toFixed(2)} each for our meal.\n\n` +
+           `You guys all owe me ${formatBillCurrency(perPersonAmount)} each for our meal.\n\n` +
            `Bill Details:\n` +
-           `- Subtotal: $${subtotalValue.toFixed(2)}\n` +
-           `- Tax: $${taxValue.toFixed(2)}\n` +
-           `- ${tipDescription}\n` +
-           `- Total: $${totalValue.toFixed(2)}\n\n` +
+           `- Subtotal: ${formatBillCurrency(subtotalValue)}\n` +
+           `- Tax: ${formatBillCurrency(taxValue)}\n` +
+           `- Tip: ${formatBillCurrency(tipValue)}\n` +
+           `- Total: ${formatBillCurrency(totalValue)}\n\n` +
            `Split between ${numPeople} people\n` +
            `Please Venmo or pay me in cash!\n\n` +
            `Sent via Flick2Split`;
@@ -56,11 +83,6 @@ export default function SplitEvenly() {
   
   // Handle share functionality
   const handleShare = async () => {
-    if (subtotalValue === 0) {
-      Alert.alert('Missing Information', 'Please enter at least the subtotal amount.');
-      return;
-    }
-    
     try {
       const message = formatDetailsForSharing();
       
@@ -71,7 +93,7 @@ export default function SplitEvenly() {
       } else {
         await Share.share({
           message: message,
-          title: `Payment Request: $${perPersonAmount.toFixed(2)} per person`
+          title: `Payment Request: ${formatBillCurrency(perPersonAmount)} per person`
         });
       }
     } catch (error) {
@@ -80,192 +102,66 @@ export default function SplitEvenly() {
     }
   };
   
-  // Handle tip selection
-  const handleTipSelect = (tipPercent) => {
-    if (!subtotal || parseFloat(subtotal) === 0) {
-      Alert.alert(
-        "Missing Information",
-        "Please enter a subtotal amount before selecting a tip.",
-        [{ text: "OK" }]
-      );
-      return;
-    }
-    
-    setSelectedTip(tipPercent);
-    setIsCustomTip(false);
-  };
-  
-  // Handle custom tip selection
-  const handleCustomTipSelect = () => {
-    if (!subtotal || parseFloat(subtotal) === 0) {
-      Alert.alert(
-        "Missing Information",
-        "Please enter a subtotal amount before adding a custom tip.",
-        [{ text: "OK" }]
-      );
-      return;
-    }
-    
-    setSelectedTip(null);
-    setIsCustomTip(true);
-  };
-  
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <StatusBar style="light" />
-      
-      {/* Background elements */}
-      <View style={styles.backgroundElements}>
-        <View style={styles.circle1} />
-        <View style={styles.circle2} />
-      </View>
-      
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
+    <>
+      <LinearGradient
+        colors={['#3442C6', '#5B42E8', '#7451FB', '#8360FF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.container}
         >
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Split Evenly</Text>
-      </View>
-      
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {/* Bill Info Section */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Bill Details</Text>
+          <StatusBar style="light" />
           
-          {/* Subtotal and Tax on the same row */}
-          <View style={styles.rowContainer}>
-            <View style={[styles.inputContainer, styles.halfWidth]}>
-              <Text style={styles.inputLabel}>Subtotal</Text>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.currencySymbol}>$</Text>
-                <TextInput
-                  style={styles.input}
-                  value={subtotal}
-                  onChangeText={setSubtotal}
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  placeholderTextColor="rgba(255,255,255,0.5)"
-                />
-              </View>
-            </View>
-            
-            <View style={[styles.inputContainer, styles.halfWidth]}>
-              <Text style={styles.inputLabel}>Tax</Text>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.currencySymbol}>$</Text>
-                <TextInput
-                  style={styles.input}
-                  value={tax}
-                  onChangeText={setTax}
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  placeholderTextColor="rgba(255,255,255,0.5)"
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-        
-        {/* Number of People Section */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Number of People</Text>
-          
-          <View style={styles.peopleContainer}>
+          <View style={styles.header}>
             <TouchableOpacity 
-              style={styles.peopleButton}
-              onPress={() => setNumPeople(Math.max(1, parseInt(numPeople || 1) - 1).toString())}
-              disabled={parseInt(numPeople || 1) <= 1}
+              style={styles.backButton}
+              onPress={() => router.back()}
             >
-              <Ionicons name="remove" size={20} color="white" />
+              <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
-            
-            <View style={styles.peopleInputContainer}>
-              <TextInput
-                style={styles.peopleInput}
-                value={numPeople}
-                onChangeText={setNumPeople}
-                keyboardType="number-pad"
-                textAlign="center"
-              />
-              <Text style={styles.peopleLabel}>people</Text>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.peopleButton}
-              onPress={() => setNumPeople((parseInt(numPeople || 1) + 1).toString())}
-            >
-              <Ionicons name="add" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
-          
-        {/* Tip Selection Section */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Select Tip</Text>
-          
-          <View style={styles.tipContainer}>
-            {[0, 15, 20].map((tip) => (
-              <TouchableOpacity
-                key={tip}
-                style={[
-                  styles.tipButton,
-                  selectedTip === tip && !isCustomTip && styles.selectedTipButton
-                ]}
-                onPress={() => handleTipSelect(tip)}
-              >
-                <Text style={[
-                  styles.tipButtonText,
-                  selectedTip === tip && !isCustomTip && styles.selectedTipText
-                ]}>
-                  {tip}%
-                </Text>
-              </TouchableOpacity>
-            ))}
-            
-            <TouchableOpacity
-              style={[
-                styles.tipButton,
-                isCustomTip && styles.selectedTipButton
-              ]}
-              onPress={handleCustomTipSelect}
-            >
-              <Text style={[
-                styles.tipButtonText,
-                isCustomTip && styles.selectedTipText
-              ]}>
-                Custom
-              </Text>
-            </TouchableOpacity>
+            <Text style={styles.title}>Split Evenly</Text>
           </View>
           
-          {isCustomTip && (
-            <View style={styles.customTipContainer}>
-              <Text style={styles.inputLabel}>Custom Tip Amount</Text>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.currencySymbol}>$</Text>
-                <TextInput
-                  style={styles.input}
-                  value={customTipAmount}
-                  onChangeText={setCustomTipAmount}
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  placeholderTextColor="rgba(255,255,255,0.5)"
-                  autoFocus
-                />
+          <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+            {/* Number of People Section */}
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Number of People</Text>
+              
+              <View style={styles.peopleContainer}>
+                <TouchableOpacity 
+                  style={styles.peopleButton}
+                  onPress={() => setNumPeople(Math.max(1, parseInt(numPeople || 1) - 1).toString())}
+                  disabled={parseInt(numPeople || 1) <= 1}
+                >
+                  <Ionicons name="remove" size={20} color="white" />
+                </TouchableOpacity>
+                
+                <View style={styles.peopleInputContainer}>
+                  <TextInput
+                    style={styles.peopleInput}
+                    value={numPeople}
+                    onChangeText={setNumPeople}
+                    keyboardType="number-pad"
+                    textAlign="center"
+                  />
+                  <Text style={styles.peopleLabel}>people</Text>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.peopleButton}
+                  onPress={() => setNumPeople((parseInt(numPeople || 1) + 1).toString())}
+                >
+                  <Ionicons name="add" size={20} color="white" />
+                </TouchableOpacity>
               </View>
             </View>
-          )}
-        </View>
-        
-        {/* Summary Card - Only show if tip is selected */}
-        {showSummary && (
-          <>
+              
+            {/* Summary Card */}
             <View style={styles.summaryCard}>
               <View style={styles.summaryHeader}>
                 <Ionicons name="receipt-outline" size={24} color="white" style={styles.summaryIcon} />
@@ -274,33 +170,34 @@ export default function SplitEvenly() {
               
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryValue}>${subtotalValue.toFixed(2)}</Text>
+                <Text style={styles.summaryValue}>{formatBillCurrency(subtotalValue)}</Text>
               </View>
               
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Tax</Text>
-                <Text style={styles.summaryValue}>${taxValue.toFixed(2)}</Text>
+                <Text style={styles.summaryValue}>{formatBillCurrency(taxValue)}</Text>
               </View>
               
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>
-                  {isCustomTip ? 'Tip' : `Tip (${selectedTip}%)`}
-                </Text>
-                <Text style={styles.summaryValue}>${tipValue.toFixed(2)}</Text>
+                <Text style={styles.summaryLabel}>Tip</Text>
+                <Text style={styles.summaryValue}>{formatBillCurrency(tipValue)}</Text>
               </View>
               
               <View style={[styles.summaryRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>${totalValue.toFixed(2)}</Text>
+                <Text style={styles.totalValue}>{formatBillCurrency(totalValue)}</Text>
               </View>
             </View>
             
             {/* Per Person Result */}
             <View style={styles.perPersonCard}>
               <Text style={styles.perPersonTitle}>Each Person Pays</Text>
-              <Text style={styles.perPersonAmount}>${perPersonAmount.toFixed(2)}</Text>
+              <Text style={styles.perPersonAmount}>{formatBillCurrency(perPersonAmount)}</Text>
               <Text style={styles.perPersonSubtext}>{numPeople} people splitting equally</Text>
             </View>
+
+            {/* Currency Converter Button */}
+            <CurrencyConverterButton onPress={() => setShowCurrencyModal(true)} />
             
             {/* Share Button */}
             <TouchableOpacity
@@ -310,17 +207,39 @@ export default function SplitEvenly() {
               <Ionicons name="share-outline" size={22} color="white" style={styles.shareIcon} />
               <Text style={styles.shareButtonText}>Share Split Details</Text>
             </TouchableOpacity>
-          </>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+            {/* Currency Modal */}
+            <CurrencyConverterModal
+              visible={showCurrencyModal}
+              onClose={() => setShowCurrencyModal(false)}
+              originalCurrency={originalCurrency}
+              onOriginalCurrencySelect={setOriginalCurrency}
+              targetCurrency={targetCurrency}
+              onTargetCurrencySelect={setTargetCurrency}
+              onConvert={convertCurrency}
+              showOriginalDropdown={showOriginalDropdown}
+              setShowOriginalDropdown={setShowOriginalDropdown}
+              showTargetDropdown={showTargetDropdown}
+              setShowTargetDropdown={setShowTargetDropdown}
+              originalSearchQuery={originalSearchQuery}
+              setOriginalSearchQuery={setOriginalSearchQuery}
+              targetSearchQuery={targetSearchQuery}
+              setTargetSearchQuery={setTargetSearchQuery}
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#3442C6",
+    backgroundColor: "transparent",
   },
   backgroundElements: {
     position: 'absolute',
@@ -330,45 +249,28 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: -1,
   },
-  circle1: {
-    position: 'absolute',
-    width: 600,
-    height: 600,
-    borderRadius: 300,
-    backgroundColor: 'rgba(80, 130, 255, 0.3)',
-    top: -350,
-    left: -100,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 500,
-    height: 500,
-    borderRadius: 250,
-    backgroundColor: 'rgba(110, 80, 255, 0.2)',
-    bottom: -200,
-    right: -150,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 20,
+    paddingTop: 30,
+    paddingBottom: 10,
     paddingHorizontal: 20,
   },
   backButton: {
     marginRight: 15,
-    width: 40,
-    height: 40,
+    width: 30,
+    height: 30,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   title: {
-    fontSize: 28,
+    fontSize: 25,
     fontWeight: "800",
     color: "white",
     letterSpacing: 0.5,
+    textAlign: 'center',
   },
   content: {
     flex: 1,
@@ -589,5 +491,74 @@ const styles = StyleSheet.create({
   },
   halfWidth: {
     width: '48%',
+  },
+  currencyButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 30,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  currencyIcon: {
+    marginRight: 10,
+  },
+  currencyButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: "#3442C6",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "white",
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  currencyList: {
+    maxHeight: '80%',
+  },
+  currencyItem: {
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  selectedCurrencyItem: {
+    backgroundColor: "rgba(76, 222, 128, 0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(76, 222, 128, 0.5)",
+  },
+  currencyCode: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "white",
+    marginBottom: 4,
+  },
+  currencyName: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
   },
 });

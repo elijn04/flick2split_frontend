@@ -142,12 +142,7 @@ export const currencies = [
  * @returns {string} Formatted currency string
  */
 export const formatCurrency = (amount, currencyCode) => {
-  const currency = currencies.find(c => c.code === currencyCode);
-  if (currency) {
-    return `${currency.symbol}${parseFloat(amount).toFixed(2)}`;
-  } else {
-    return `${parseFloat(amount).toFixed(2)}`;
-  }
+  return parseFloat(amount).toFixed(2);
 };
 
 /**

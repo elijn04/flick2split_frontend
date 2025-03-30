@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Modal, SafeAreaView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
-import { currencies, formatCurrency as formatCurrencyUtil, searchCurrencies } from './result_components/utils/currencies';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Import modularized components
-import { CurrencySelect } from './result_components/CurrencySelect';
 import { ItemsList } from './result_components/ItemsList';
 import { TipSection } from './result_components/TipSection';
 import { BillSummary } from './result_components/BillSummary';
@@ -36,7 +35,7 @@ export default function Results() {
     tax: parseFloat(initialBill.tax) || 0,
     tip: parseFloat(initialBill.tip) || 0,
     total: parseFloat(initialBill.total) || 0,
-    uses_usd: initialBill.uses_usd !== undefined ? initialBill.uses_usd : true
+    currency_symbol: initialBill.currency_symbol || '$'
   } : null;
   
   // State management
@@ -50,17 +49,7 @@ export default function Results() {
   const [itemsConfirmed, setItemsConfirmed] = useState(false);
   const [backPressCount, setBackPressCount] = useState(0);
   const [splitComplete, setSplitComplete] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState(bill?.uses_usd ? 'USD' : null);
-  const [showCurrencySelect, setShowCurrencySelect] = useState(!bill?.uses_usd);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showConversionOption, setShowConversionOption] = useState(false);
-  const [wantToConvert, setWantToConvert] = useState(null);
-  const [conversionCurrency, setConversionCurrency] = useState(null);
-  const [showConversionDropdown, setShowConversionDropdown] = useState(false);
-
-  // Filter currencies based on search
-  const filteredCurrencies = searchCurrencies(searchQuery);
+  const [helpVisible, setHelpVisible] = useState(false);
 
   // Handle missing bill data
   if (!bill) {
@@ -79,10 +68,10 @@ export default function Results() {
   }
 
   /**
-   * Format number as currency string
+   * Format number as currency string using the bill's currency symbol
    */
   const formatCurrency = (amount) => {
-    return formatCurrencyUtil(amount, selectedCurrency);
+    return parseFloat(amount).toFixed(2);
   };
 
   /**
@@ -196,7 +185,7 @@ export default function Results() {
    */
   const addNewItem = () => {
     const newItem = { 
-      name: "New Item", 
+      name: "", 
       quantity: 1, 
       price: 0 
     };
@@ -216,7 +205,47 @@ export default function Results() {
       subtotal: parseFloat(bill.subtotal),
       tax: parseFloat(bill.tax) || 0,
       tip: parseFloat(bill.tip) || 0,
-      total: parseFloat(bill.total)
+      total: parseFloat(bill.total),
+      currency_symbol: bill.currency_symbol || '$'
+    };
+
+    router.push({
+      pathname: '/split',
+      params: { billData: JSON.stringify(billData) }
+    });
+    
+    setSplitComplete(true);
+  };
+
+  /**
+   * Navigation handlers for split options
+   */
+  const handleSplitEvenly = () => {
+    const billData = {
+      items: bill.items,
+      subtotal: parseFloat(bill.subtotal),
+      tax: parseFloat(bill.tax) || 0,
+      tip: parseFloat(bill.tip) || 0,
+      total: parseFloat(bill.total),
+      currency_symbol: bill.currency_symbol || '$'
+    };
+
+    router.push({
+      pathname: '/split-evenly',
+      params: { billData: JSON.stringify(billData) }
+    });
+    
+    setSplitComplete(true);
+  };
+  
+  const handleSplitByItem = () => {
+    const billData = {
+      items: bill.items,
+      subtotal: parseFloat(bill.subtotal),
+      tax: parseFloat(bill.tax) || 0,
+      tip: parseFloat(bill.tip) || 0,
+      total: parseFloat(bill.total),
+      currency_symbol: bill.currency_symbol || '$'
     };
 
     router.push({
@@ -278,74 +307,87 @@ export default function Results() {
     }
   };
 
-  /**
-   * Handle currency selection
-   */
-  const handleCurrencySelect = (currencyCode) => {
-    setSelectedCurrency(currencyCode);
-    setIsDropdownOpen(false);
-    setShowConversionOption(true);
-    setSearchQuery('');
-    setBill(prev => ({
-      ...prev,
-      uses_usd: currencyCode === 'USD'
-    }));
-  };
-  
-  /**
-   * Handle conversion currency selection
-   */
-  const handleConversionCurrencySelect = (currencyCode) => {
-    setConversionCurrency(currencyCode);
-    setShowConversionDropdown(false);
+  // Help modal toggle
+  const toggleHelp = () => {
+    setHelpVisible(!helpVisible);
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
-      <View style={styles.backgroundElements}>
-        <View style={styles.circle1} />
-        <View style={styles.circle2} />
-      </View>
-      
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={handleBackPress}
-        >
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Review & Edit Receipt</Text>
-      </View>
+    <>
+      <LinearGradient
+        colors={['#3442C6', '#5B42E8', '#7451FB', '#8360FF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <StatusBar style="light" />
+          
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={handleBackPress}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Review & Edit Receipt</Text>
+          </View>
 
-      <ScrollView 
-        style={styles.content}
-        ref={scrollViewRef}
-      >
-        {showCurrencySelect && (
-          <CurrencySelect
-            selectedCurrency={selectedCurrency}
-            setSelectedCurrency={setSelectedCurrency}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            isDropdownOpen={isDropdownOpen}
-            setIsDropdownOpen={setIsDropdownOpen}
-            showConversionOption={showConversionOption}
-            wantToConvert={wantToConvert}
-            setWantToConvert={setWantToConvert}
-            conversionCurrency={conversionCurrency}
-            setConversionCurrency={setConversionCurrency}
-            showConversionDropdown={showConversionDropdown}
-            setShowConversionDropdown={setShowConversionDropdown}
-            setShowCurrencySelect={setShowCurrencySelect}
-            filteredCurrencies={filteredCurrencies}
-            handleCurrencySelect={handleCurrencySelect}
-            handleConversionCurrencySelect={handleConversionCurrencySelect}
-          />
-        )}
+          <TouchableOpacity 
+            style={styles.helpButton}
+            onPress={toggleHelp}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="help-circle" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
 
-        {!showCurrencySelect && (
-          <>
+          {/* Help Modal */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={helpVisible}
+            onRequestClose={toggleHelp}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>How to Use:</Text>
+                
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>1. Review Items</Text>
+                  <Text style={styles.helpText}>Check your receipt items and edit any mistakes. Tap on item name or price to edit.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>2. Confirm Items</Text>
+                  <Text style={styles.helpText}>After reviewing, tap "Confirm Items" to proceed to the next step.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>3. Add Tip</Text>
+                  <Text style={styles.helpText}>Choose a percentage or enter a custom tip amount.</Text>
+                </View>
+
+                <View style={styles.helpSection}>
+                  <Text style={styles.helpSectionTitle}>4. Split the Bill</Text>
+                  <Text style={styles.helpText}>Choose how to split the bill - either evenly among everyone or assign specific items to people.</Text>
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={toggleHelp}
+                >
+                  <Text style={styles.closeButtonText}>Got it!</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          <ScrollView 
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+            ref={scrollViewRef}
+          >
             <ItemsList
               bill={bill}
               setBill={setBill}
@@ -356,6 +398,7 @@ export default function Results() {
               editingName={editingName}
               setEditingName={setEditingName}
               itemsConfirmed={itemsConfirmed}
+              setItemsConfirmed={setItemsConfirmed}
               handleConfirmItems={handleConfirmItems}
               formatCurrency={formatCurrency}
               updateItemName={updateItemName}
@@ -375,12 +418,7 @@ export default function Results() {
                 selectTipPercent={selectTipPercent}
                 handleCustomTipChange={handleCustomTipChange}
                 onTipSelect={() => {
-                  // Short delay to ensure UI updates before scrolling
-                  setTimeout(() => {
-                    if (scrollViewRef.current) {
-                      scrollViewRef.current.scrollToEnd({ animated: true });
-                    }
-                  }, 100);
+                  // No automatic scrolling - let users scroll manually
                 }}
               />
             ) : (
@@ -391,23 +429,26 @@ export default function Results() {
               <BillSummary
                 bill={bill}
                 formatCurrency={formatCurrency}
-                handleSplitBill={handleSplitBill}
+                handleSplitBill={handleSplitByItem}
+                handleSplitEvenly={handleSplitEvenly}
                 splitComplete={splitComplete}
                 shareGuestList={shareGuestList}
               />
             )}
-          </>
-        )}
-      </ScrollView>
-    </View>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#3442C6',
-    paddingTop: 60,
+    backgroundColor: "transparent",
   },
   backgroundElements: {
     position: 'absolute',
@@ -417,46 +458,37 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: -1,
   },
-  circle1: {
-    position: 'absolute',
-    width: 500,
-    height: 500,
-    borderRadius: 250,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    top: -200,
-    left: -100,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    bottom: -150,
-    right: -100,
-  },
   header: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    paddingTop: 10,
+    paddingTop: 40,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
   },
   backButton: {
-    position: 'absolute',
-    left: 20,
-    padding: 5,
+    marginRight: 15,
+    marginTop: -20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   title: {
+    flex: 1,
     fontSize: 24,
-    fontWeight: '700',
-    color: 'white',
-    textAlign: 'center',
+    fontWeight: "800",
+    color: "white",
+    letterSpacing: 0.5,
+    paddingRight: 40,
   },
   content: {
-    paddingHorizontal: 20,
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 30,
   },
   errorText: {
     color: 'white',
@@ -484,10 +516,96 @@ const styles = StyleSheet.create({
   },
   confirmPrompt: {
     textAlign: 'center',
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 20,
     marginBottom: 40,
     fontSize: 16,
     fontStyle: 'italic',
+  },
+  card: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+    marginBottom: 15,
+    marginTop: 5,
+  },
+  helpButton: {
+    position: 'absolute',
+    top: 20,
+    right: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 30,
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 25,
+    color: '#3442C6',
+    textAlign: 'center',
+  },
+  helpSection: {
+    marginBottom: 22,
+    width: '100%',
+  },
+  helpSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#3442C6',
+  },
+  helpText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#444',
+  },
+  closeButton: {
+    backgroundColor: '#3442C6',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    textAlign: 'center',
   },
 }); 
