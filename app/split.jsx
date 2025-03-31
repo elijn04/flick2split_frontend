@@ -239,30 +239,48 @@ export default function SplitBill() {
       return "No guests have been added yet.";
     }
     
-    let message = "Bill Split Summary\n";
-    message += "------------------------\n";
-    message += "Made with Flick2Split\n\n";
+    let message = "💸💸💸 BILL SPLIT SUMMARY 💸💸💸\n\n";
+    
+    // Calculate total bill amount
+    const totalBillAmount = previousGuests.reduce((sum, guest) => sum + guest.total, 0);
     
     // Add quick summary of all guests first
+    message += "👥 PAYMENT REQUESTS 👥\n";
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+    
     previousGuests.forEach(guest => {
-      message += '\n'
-      message += `${guest.name}: ${formatCurrency(guest.total)}\n`;
+      message += `${guest.name} owes $${formatCurrency(guest.total)} 💰\n`;
     });
+    
+    // Add total bill information
+    message += "\n📋 BILL DETAILS 📋\n";
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    message += `🧾 Subtotal: $${formatCurrency(billData.subtotal)}\n`;
+    message += `🏛️ Tax: $${formatCurrency(billData.tax)}\n`;
+    message += `💁 Tip: $${formatCurrency(billData.tip)}\n`;
+    message += `💯 Total: $${formatCurrency(totalBillAmount)}\n`;
+    message += `👥 Split between ${previousGuests.length} people\n\n`;
     
     // Add detailed breakdown
-    message += "\n------- Detailed Breakdown -------\n\n";
+    message += "📊 DETAILED BREAKDOWN 📊\n";
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
     
     previousGuests.forEach(guest => {
-      message += `${guest.name}'s Total: ${formatCurrency(guest.total)}\n`;
-      message += "Items:\n";
+      message += `👤 ${guest.name}'s TOTAL: $${formatCurrency(guest.total)}\n`;
+      message += "   ITEMS:\n";
       guest.items.forEach(item => {
-        message += `- ${item.name}: ${formatCurrency(item.price)}\n`;
+        message += `   • ${item.name}: $${formatCurrency(item.price)}\n`;
       });
-      message += `Subtotal: ${formatCurrency(guest.subtotal)}\n`;
-      message += `Tax: ${formatCurrency(guest.tax)}\n`;
-      message += `Tip: ${formatCurrency(guest.tip)}\n`;
-      message += `Total: ${formatCurrency(guest.total)}\n\n`;
+      message += `   📝 Subtotal: $${formatCurrency(guest.subtotal)}\n`;
+      message += `   🏛️ Tax: $${formatCurrency(guest.tax)}\n`;
+      message += `   💁 Tip: $${formatCurrency(guest.tip)}\n`;
+      message += `   💰 Total: $${formatCurrency(guest.total)}\n\n`;
     });
+    
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    message += "💳 Please Venmo or pay in cash!\n";
+    message += "🚀 Sent via Flick2Split\n";
+    message += "✨ Hassle-free bill splitting ✨";
 
     return message;
   };

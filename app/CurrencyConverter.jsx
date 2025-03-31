@@ -2,11 +2,15 @@ import { View, Text, Modal, TouchableOpacity, ScrollView, StyleSheet, TextInput,
 import { useState, useEffect } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { currencies, searchCurrencies } from './utils/currencies';
+import CurrencyAPI from '@everapi/currencyapi-js';
 
-export const useCurrencyConverter = (initialCurrencyCode = 'USD') => {
+// Initialize at top level of your component/file
+const currencyApi = new CurrencyAPI('fca_live_3DtISZBiBUFs8JAphIVmm2B5w9PjB2kfvLRChFIP');
+
+export const useCurrencyConverter = (initialCurrencyCode = null) => {
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
-  const [originalCurrency, setOriginalCurrency] = useState(initialCurrencyCode);
-  const [targetCurrency, setTargetCurrency] = useState('EUR');
+  const [originalCurrency, setOriginalCurrency] = useState(null);
+  const [targetCurrency, setTargetCurrency] = useState(null);
   const [exchangeRate, setExchangeRate] = useState(1);
   const [showOriginalDropdown, setShowOriginalDropdown] = useState(false);
   const [showTargetDropdown, setShowTargetDropdown] = useState(false);
@@ -20,24 +24,34 @@ export const useCurrencyConverter = (initialCurrencyCode = 'USD') => {
     }
     
     try {
-      const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${fromCurrency}`);
-      const data = await response.json();
-      setExchangeRate(data.rates[toCurrency]);
+      const response = await currencyApi.latest({
+        base_currency: fromCurrency,
+        currencies: toCurrency
+      });
+      
+      const rate = response.data?.[toCurrency]?.value;
+      
+      if (!rate) throw new Error('Exchange rate not found');
+      
+      setExchangeRate(rate);
     } catch (error) {
-      console.error('Exchange rate error:', error);
-      Alert.alert('Error', 'Failed to fetch exchange rate');
+      Alert.alert('Conversion Error', error.message);
+      setExchangeRate(1);
     }
   };
 
   const convertCurrency = () => {
+    if (!originalCurrency || !targetCurrency) {
+      Alert.alert('Error', 'Please select both currencies');
+      return;
+    }
+    if (originalCurrency === targetCurrency) {
+      Alert.alert('Error', 'Please select different currencies for conversion');
+      return;
+    }
     fetchExchangeRate(originalCurrency, targetCurrency);
     setShowCurrencyModal(false);
   };
-  
-  // Set the original currency when initialCurrencyCode changes
-  useEffect(() => {
-    setOriginalCurrency(initialCurrencyCode);
-  }, [initialCurrencyCode]);
 
   return {
     showCurrencyModal,
@@ -105,7 +119,11 @@ export const CurrencyConverterModal = ({
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Currency Converter</Text>
+            <Text style={styles.modalTitle}>
+              {originalCurrency && targetCurrency 
+                ? `${getCurrencyLabel(originalCurrency)} → ${getCurrencyLabel(targetCurrency)}`
+                : "Currency Converter"}
+            </Text>
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={onClose}
@@ -126,7 +144,7 @@ export const CurrencyConverterModal = ({
                   }}
                 >
                   <Text style={styles.dropdownButtonText}>
-                    {originalCurrency ? getCurrencyLabel(originalCurrency) : "Choose Original Currency"}
+                    {showOriginalDropdown ? "Choose Original Currency" : (originalCurrency ? getCurrencyLabel(originalCurrency) : "Choose Original Currency")}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="white" />
                 </TouchableOpacity>
@@ -189,7 +207,7 @@ export const CurrencyConverterModal = ({
                   }}
                 >
                   <Text style={styles.dropdownButtonText}>
-                    {targetCurrency ? getCurrencyLabel(targetCurrency) : "Choose Final Currency"}
+                    {showTargetDropdown ? "Choose Converted Currency" : (targetCurrency ? getCurrencyLabel(targetCurrency) : "Choose Converted Currency")}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="white" />
                 </TouchableOpacity>
@@ -331,20 +349,29 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   dropdownButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 15,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   dropdownButtonText: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: "white",
+    textAlign: 'center',
   },
   dropdownMenu: {
     position: 'absolute',

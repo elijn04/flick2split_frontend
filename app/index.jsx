@@ -380,7 +380,7 @@ export default function Index() {
 
           <TouchableOpacity 
             style={styles.helpButton}
-            onPress={toggleHelp}
+            onPress={toggleHelp}z
             activeOpacity={0.7}
           >
             <Ionicons name="help-circle" size={28} color="#FFFFFF" />
