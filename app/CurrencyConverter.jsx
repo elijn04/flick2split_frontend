@@ -451,4 +451,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
-}); 
+});
+
+// Default export combining the main components
+export default {
+  useCurrencyConverter,
+  CurrencyConverterButton,
+  CurrencyConverterModal
+}; 

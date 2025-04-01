@@ -121,4 +121,13 @@ export const handleShare = async (previousGuests, billData, targetCurrency, orig
     console.error('Share error:', error);
     Alert.alert('Error', 'Failed to share bill details');
   }
+};
+
+export default {
+  formatCurrencyAmount,
+  getCurrencySymbol,
+  formatCurrency,
+  calculateSubtotal,
+  formatGuestDetailsForSharing,
+  handleShare
 }; 

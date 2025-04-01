@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -11,7 +12,7 @@ import { SafeAreaView } from 'react-native';
 
 
 const { width } = Dimensions.get('window');
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://flick2split-backend.onrender.com';
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 /**
  * Main app component for bill splitting application
@@ -22,6 +23,8 @@ export default function Index() {
   const [image, setImage] = useState(null);
   const [responseData, setResponseData] = useState(null);
   const [helpVisible, setHelpVisible] = useState(false);
+  const [errorVisible, setErrorVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
   
   // Animation values
@@ -240,7 +243,14 @@ export default function Index() {
         aspect: [4, 3],
       });
       
-      if (!result.canceled) setImage(result.assets[0].uri);
+      if (!result.canceled) {
+        const compressedImage = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        setImage(compressedImage.uri);
+      }
       setButtonState("idle");
     } catch (error) {
       handleImageError(error);
@@ -260,7 +270,14 @@ export default function Index() {
         aspect: [4, 3],
       });
       
-      if (!result.canceled) setImage(result.assets[0].uri);
+      if (!result.canceled) {
+        const compressedImage = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        setImage(compressedImage.uri);
+      }
       setButtonState("idle");
     } catch (error) {
       handleImageError(error);
@@ -275,7 +292,7 @@ export default function Index() {
     setButtonState("processing");
     
     try {
-      // Convert image to base64
+      // Convert compressed image to base64
       const base64Image = await FileSystem.readAsStringAsync(image, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -307,11 +324,21 @@ export default function Index() {
       setButtonState("idle");
     } catch (error) {
       console.error('Error:', error);
-      const errorMessage = error.message.includes('Network request failed')
+      
+      // Provide specific guidance for photo quality issues
+      let message = error.message.includes('Network request failed')
         ? `Cannot connect to server at ${API_URL}. Check if server is running.`
         : error.message || 'Network error or server unavailable';
       
-      Alert.alert("Error", errorMessage, [{ text: "OK" }]);
+      // Add helpful photo-taking tips for any processing errors
+      if (!error.message.includes('Network request failed')) {
+        message = "We couldn't read your receipt correctly.";
+        setErrorMessage(message);
+        setErrorVisible(true);
+      } else {
+        Alert.alert("Connection Error", message, [{ text: "OK" }]);
+      }
+      
       setButtonState("error");
       setTimeout(() => setButtonState("idle"), 2000);
     }
@@ -422,6 +449,62 @@ export default function Index() {
                   onPress={toggleHelp}
                 >
                   <Text style={styles.closeButtonText}>Got it!</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Custom Error Modal */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={errorVisible}
+            onRequestClose={() => setErrorVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.errorModalContent}>
+                <View style={styles.errorIconContainer}>
+                  <Ionicons name="warning-outline" size={40} color="#FF3B30" />
+                </View>
+                
+                <Text style={styles.errorModalTitle}>Receipt Not Recognized</Text>
+                
+                <View style={styles.errorTipsContainer}>
+                  <View style={styles.tipRow}>
+                    <Ionicons name="phone-portrait-outline" size={22} color="#3442C6" style={styles.tipIcon} />
+                    <Text style={styles.tipText}>Hold your phone steady</Text>
+                  </View>
+                  
+                  <View style={styles.tipRow}>
+                    <Ionicons name="scan-outline" size={22} color="#3442C6" style={styles.tipIcon} />
+                    <Text style={styles.tipText}>Receipt should fill most of the screen</Text>
+                  </View>
+                  
+                  <View style={styles.tipRow}>
+                    <Ionicons name="phone-landscape-outline" size={22} color="#3442C6" style={styles.tipIcon} />
+                    <Text style={styles.tipText}>Keep phone parallel to the table</Text>
+                  </View>
+                  
+                  <View style={styles.tipRow}>
+                    <Ionicons name="sunny-outline" size={22} color="#3442C6" style={styles.tipIcon} />
+                    <Text style={styles.tipText}>Ensure good lighting</Text>
+                  </View>
+                  
+                  <View style={styles.tipRow}>
+                    <Ionicons name="create-outline" size={22} color="#3442C6" style={styles.tipIcon} />
+                    <Text style={styles.tipText}>Try manual entry if problems persist</Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.errorCloseButton}
+                  onPress={() => {
+                    setErrorVisible(false);
+                    setImage(null); // Clear the image to go back to home screen
+                    setButtonState("idle");
+                  }}
+                >
+                  <Text style={styles.errorCloseButtonText}>Try Again</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -940,5 +1023,67 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
     textAlign: 'center',
+  },
+  // Error modal styles
+  errorModalContent: {
+    backgroundColor: 'white',
+    padding: 25,
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  errorIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  errorTipsContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 10,
+  },
+  tipIcon: {
+    marginRight: 12,
+  },
+  tipText: {
+    fontSize: 16,
+    color: '#555',
+    flex: 1,
+  },
+  errorCloseButton: {
+    backgroundColor: '#3442C6',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginBottom: 0,
+    width: '80%',
+    alignItems: 'center',
+  },
+  errorCloseButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

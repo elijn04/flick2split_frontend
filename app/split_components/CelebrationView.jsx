@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,25 @@ const CelebrationView = ({
   targetCurrency,
   originalCurrency
 }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1000,
+          useNativeDriver: true
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true
+        })
+      ])
+    ).start();
+  }, []);
+
   return (
     <View style={styles.card}>
       <View style={styles.celebrationContainer}>
@@ -68,21 +87,27 @@ const CelebrationView = ({
         All items have been assigned to guests. Review the guest totals below.
       </Animated.Text>
       
-      <TouchableOpacity 
-        style={styles.shareButton}
-        onPress={onShare}
-        activeOpacity={0.85}
-      >
-        <LinearGradient
-          colors={['#4CDE80', '#3FCC70']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.shareButtonGradient}
+      <Animated.View style={[
+        styles.shareButton,
+        {
+          transform: [{ scale: pulseAnim }]
+        }
+      ]}>
+        <TouchableOpacity
+          onPress={onShare}
+          activeOpacity={0.85}
         >
-          <Ionicons name="share-outline" size={22} color="white" style={styles.shareIcon} />
-          <Text style={styles.shareButtonText}>Share Split Details</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+          <LinearGradient
+            colors={['#4CDE80', '#3FCC70']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.shareButtonGradient}
+          >
+            <Ionicons name="share-outline" size={22} color="white" style={styles.shareIcon} />
+            <Text style={styles.shareButtonText}>Share Split Details</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
       
       {/* Currency Converter Button */}
       <View style={styles.currencyButtonsContainer}>
@@ -101,7 +126,7 @@ const CelebrationView = ({
             onPress={onReset}
             accessibilityLabel="Reset currency conversion"
           >
-            <Ionicons name="refresh-circle" size={28} color="#FF4F66" />
+            <Ionicons name="refresh-circle" size={28} color="white" />
           </TouchableOpacity>
         )}
       </View>
@@ -235,6 +260,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 2,
+    backgroundColor: '#FFD54F',
   },
   currencyIcon: {
     marginRight: 8,

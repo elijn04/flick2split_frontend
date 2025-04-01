@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCurrencyConverter, CurrencyConverterButton, CurrencyConverterModal } from "./CurrencyConverter";
 import { currencies } from './utils/currencies';
+import SplitEvenlyBillSummary from './split_components/SplitEvenlyBillSummary';
 
 export default function SplitEvenly() {
   const router = useRouter();
@@ -51,13 +52,20 @@ export default function SplitEvenly() {
   };
   
   // Format currency with appropriate symbol (only for converted currency)
-  const formatBillCurrency = (amount) => {
-    if (originalCurrency && targetCurrency && targetCurrency !== originalCurrency) {
-      const convertedAmount = amount * exchangeRate;
-      const symbol = getCurrencySymbol(targetCurrency);
-      return `${symbol}${parseFloat(convertedAmount).toFixed(2)}`;
+  const formatBillCurrency = (amount, isTotal = false) => {
+    if (isTotal) {
+      // For totals, use the appropriate symbol
+      if (originalCurrency && targetCurrency && targetCurrency !== originalCurrency) {
+        // Original total with original currency symbol
+        return `${currencySymbol}${formatAmount(amount)}`;
+      } else {
+        // No conversion, just use original currency
+        return `${currencySymbol}${formatAmount(amount)}`;
+      }
+    } else {
+      // For non-totals (subtotal, tax, tip), just return the number without symbol
+      return formatAmount(amount);
     }
-    return formatAmount(amount);
   };
   
   // Get currency symbol helper
@@ -68,7 +76,7 @@ export default function SplitEvenly() {
   
   // Create share message
   const formatDetailsForSharing = () => {
-    const isConverted = targetCurrency && targetCurrency !== originalCurrency;
+    const isConverted = originalCurrency && targetCurrency && targetCurrency !== originalCurrency;
     
     let conversionInfo = '';
     if (isConverted) {
@@ -77,14 +85,27 @@ export default function SplitEvenly() {
                        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     }
     
+    // Format per-person amount with correct currency symbol or code
+    const formattedPerPersonAmount = isConverted
+      ? `${getCurrencySymbol(targetCurrency)}${formatAmount(perPersonAmount * exchangeRate)}`
+      : `${formatAmount(perPersonAmount)}`;
+      
+    // Format total with correct currency representation
+    const formattedTotal = isConverted
+      ? `${formatAmount(totalValue)} (${getCurrencySymbol(targetCurrency)}${formatAmount(totalValue * exchangeRate)})`
+      : formatAmount(totalValue);
+    
+    // Currency code to display when not converting
+    const currencyCode = !isConverted && originalCurrency ? ` ${originalCurrency}` : '';
+    
     return `💸💸💸 PAYMENT REQUEST 💸💸💸\n\n` +
-           `You guys all owe me ${formatBillCurrency(perPersonAmount)} each for our meal.\n` +
+           `You guys all owe me ${formattedPerPersonAmount}${currencyCode} each for our meal.\n` +
            `📋 Bill Details:\n` +
            `────────────────────────────\n` +
-           `�� Subtotal: ${formatBillCurrency(subtotalValue)}\n` +
-           `🏛️ Tax: ${formatBillCurrency(taxValue)}\n` +
-           `👑 Tip: ${formatBillCurrency(tipValue)}\n` +
-           `💯 Total: ${formatBillCurrency(totalValue)}` +
+           `🍽️ Subtotal: ${formatAmount(subtotalValue)}\n` +
+           `🏛️ Tax: ${formatAmount(taxValue)}\n` +
+           `👑 Tip: ${formatAmount(tipValue)}\n` +
+           `💯 Total: ${formattedTotal}${currencyCode}` +
            `${conversionInfo}\n` +
            `👥 Split between ${numPeople} people\n` +
            `💳 Please Venmo or pay me in cash!\n\n` +
@@ -186,44 +207,29 @@ export default function SplitEvenly() {
             </View>
               
             {/* Bill Summary */}
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryHeader}>
-                <Ionicons name="receipt-outline" size={24} color="white" style={styles.summaryIcon} />
-                <Text style={styles.summaryTitle}>Bill Summary</Text>
-              </View>
-              
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryValue}>{formatBillCurrency(subtotalValue)}</Text>
-              </View>
-              
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tax</Text>
-                <Text style={styles.summaryValue}>{formatBillCurrency(taxValue)}</Text>
-              </View>
-              
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tip</Text>
-                <Text style={styles.summaryValue}>{formatBillCurrency(tipValue)}</Text>
-              </View>
-              
-              <View style={[styles.summaryRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{formatBillCurrency(totalValue)}</Text>
-              </View>
-            </View>
+            <SplitEvenlyBillSummary
+              subtotalValue={subtotalValue}
+              taxValue={taxValue}
+              tipValue={tipValue}
+              totalValue={totalValue}
+              currencySymbol={currencySymbol}
+              originalCurrency={originalCurrency}
+              targetCurrency={targetCurrency}
+              exchangeRate={exchangeRate}
+              formatAmount={formatAmount}
+              getCurrencySymbol={getCurrencySymbol}
+            />
             
             {/* Per Person Amount */}
             <View style={styles.perPersonCard}>
               <Text style={styles.perPersonTitle}>Each Person Pays</Text>
               <Text style={styles.perPersonAmount}>
-                {targetCurrency && targetCurrency !== originalCurrency 
-                  ? formatBillCurrency(perPersonAmount)
-                  : `${currencySymbol}${formatAmount(perPersonAmount)}`}
+                {originalCurrency && targetCurrency && targetCurrency !== originalCurrency 
+                  ? `${getCurrencySymbol(targetCurrency)}${formatAmount(perPersonAmount * exchangeRate)}`
+                  : formatAmount(perPersonAmount)}
               </Text>
               <Text style={styles.perPersonSubtext}>
-                {numPeople} people {originalCurrency && targetCurrency && targetCurrency !== originalCurrency && 
-                  `@ ${exchangeRate.toFixed(4)} rate`}
+                {numPeople} people
               </Text>
             </View>
 
@@ -493,5 +499,17 @@ const styles = StyleSheet.create({
     width: 90,
     textAlign: 'center',
     opacity: 0.8,
+  },
+  conversionInfo: {
+    marginTop: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+    padding: 8,
+  },
+  conversionText: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+    textAlign: 'center',
   },
 });
