@@ -18,6 +18,25 @@ import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCurrencyConverter, CurrencyConverterButton, CurrencyConverterModal } from "./CurrencyConverter";
+import { currencies } from './utils/currencies';
+
+// Import custom components
+import Header from './split_components/Header';
+import HelpModal from './split_components/HelpModal';
+import GuestNameInput from './split_components/GuestNameInput';
+import ItemSelection from './split_components/ItemSelection';
+import SplitModal from './split_components/SplitModal';
+import GuestSummary from './split_components/GuestSummary';
+import CelebrationView from './split_components/CelebrationView';
+
+// Import utility functions
+import { 
+  formatCurrency, 
+  formatCurrencyAmount, 
+  calculateSubtotal, 
+  handleShare as shareDetails 
+} from './split_components/text_message';
 
 export default function SplitBill() {
   const router = useRouter();
@@ -45,6 +64,26 @@ export default function SplitBill() {
   const celebrationOpacity = useRef(new Animated.Value(0)).current;
   const confettiY = useRef(new Animated.Value(-100)).current;
   const confettiX = useRef(Array(20).fill().map(() => new Animated.Value(0))).current;
+  
+  // Currency conversion setup
+  const {
+    showCurrencyModal,
+    setShowCurrencyModal,
+    originalCurrency,
+    setOriginalCurrency,
+    targetCurrency, 
+    setTargetCurrency,
+    exchangeRate,
+    showOriginalDropdown,
+    setShowOriginalDropdown,
+    showTargetDropdown,
+    setShowTargetDropdown,
+    originalSearchQuery,
+    setOriginalSearchQuery,
+    targetSearchQuery,
+    setTargetSearchQuery,
+    convertCurrency
+  } = useCurrencyConverter(billData?.currency_code || 'USD');
   
   // Help modal toggle
   const toggleHelp = () => {
@@ -177,11 +216,6 @@ export default function SplitBill() {
     setSplitModalVisible(false);
   };
   
-  // Calculate total cost of all items
-  const calculateSubtotal = (items) => {
-    return items.reduce((sum, item) => sum + item.price, 0);
-  };
-
   // Handle confirming items for current guest
   const confirmGuestItems = () => {
     if (selectedItems.length === 0) {
@@ -229,79 +263,32 @@ export default function SplitBill() {
     }
   };
   
-  const formatCurrency = (amount) => {
-    return parseFloat(amount).toFixed(2);
+  // Format guest details for sharing
+  const handleShare = async () => {
+    await shareDetails(
+      previousGuests, 
+      billData, 
+      targetCurrency, 
+      originalCurrency, 
+      exchangeRate, 
+      Share
+    );
   };
   
-  // Format guest details for sharing
-  const formatGuestDetailsForSharing = () => {
-    if (!previousGuests || previousGuests.length === 0) {
-      return "No guests have been added yet.";
-    }
+  // Reset currency conversion
+  const handleReset = () => {
+    // Reset to original currency and clear target currency
+    setOriginalCurrency(billData?.currency_code || 'USD');
+    setTargetCurrency(null);
     
-    let message = "💸💸💸 BILL SPLIT SUMMARY 💸💸💸\n\n";
+    // Reset any search queries
+    setOriginalSearchQuery('');
+    setTargetSearchQuery('');
     
-    // Calculate total bill amount
-    const totalBillAmount = previousGuests.reduce((sum, guest) => sum + guest.total, 0);
-    
-    // Add quick summary of all guests first
-    message += "👥 PAYMENT REQUESTS 👥\n";
-    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
-    
-    previousGuests.forEach(guest => {
-      message += `${guest.name} owes $${formatCurrency(guest.total)} 💰\n`;
-    });
-    
-    // Add total bill information
-    message += "\n📋 BILL DETAILS 📋\n";
-    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-    message += `🧾 Subtotal: $${formatCurrency(billData.subtotal)}\n`;
-    message += `🏛️ Tax: $${formatCurrency(billData.tax)}\n`;
-    message += `💁 Tip: $${formatCurrency(billData.tip)}\n`;
-    message += `💯 Total: $${formatCurrency(totalBillAmount)}\n`;
-    message += `👥 Split between ${previousGuests.length} people\n\n`;
-    
-    // Add detailed breakdown
-    message += "📊 DETAILED BREAKDOWN 📊\n";
-    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
-    
-    previousGuests.forEach(guest => {
-      message += `👤 ${guest.name}'s TOTAL: $${formatCurrency(guest.total)}\n`;
-      message += "   ITEMS:\n";
-      guest.items.forEach(item => {
-        message += `   • ${item.name}: $${formatCurrency(item.price)}\n`;
-      });
-      message += `   📝 Subtotal: $${formatCurrency(guest.subtotal)}\n`;
-      message += `   🏛️ Tax: $${formatCurrency(guest.tax)}\n`;
-      message += `   💁 Tip: $${formatCurrency(guest.tip)}\n`;
-      message += `   💰 Total: $${formatCurrency(guest.total)}\n\n`;
-    });
-    
-    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-    message += "💳 Please Venmo or pay in cash!\n";
-    message += "🚀 Sent via Flick2Split\n";
-    message += "✨ Hassle-free bill splitting ✨";
-
-    return message;
-  };
-
-  // Handle share button press
-  const handleShare = async () => {
-    try {
-      if (!previousGuests || previousGuests.length === 0) {
-        Alert.alert('No Data', 'There are no guests to share information about.');
-        return;
-      }
-      
-      const message = formatGuestDetailsForSharing();
-      await Share.share({
-        message: message,
-        title: 'Bill Split Details'
-      });
-    } catch (error) {
-      console.error('Share error:', error);
-      Alert.alert('Error', 'Failed to share bill details');
-    }
+    // Show brief confirmation
+    Alert.alert('Reset Complete', 'Currency conversion has been reset', [
+      { text: 'OK', style: 'default' }
+    ], { cancelable: true });
   };
   
   // Add animation function
@@ -378,299 +365,100 @@ export default function SplitBill() {
         <View style={styles.container}>
           <StatusBar style="light" />
           
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButtonSmall}
-              onPress={() => router.back()}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.title}>Split Bill</Text>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.helpButton}
-            onPress={toggleHelp}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="help-circle" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
+          {/* Header Component */}
+          <Header 
+            title="Split Bill" 
+            onBackPress={() => router.back()} 
+            onHelpPress={() => setHelpVisible(true)} 
+          />
 
           {/* Help Modal */}
-          <Modal
-            animationType="fade"
-            transparent={true}
-            visible={helpVisible}
-            onRequestClose={toggleHelp}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>How to Split Your Bill</Text>
-                
-                <View style={styles.helpSection}>
-                  <Text style={styles.helpSectionTitle}>1. Enter Names</Text>
-                  <Text style={styles.helpText}>Start by entering each person's name who shared the bill.</Text>
-                </View>
-
-                <View style={styles.helpSection}>
-                  <Text style={styles.helpSectionTitle}>2. Select Items</Text>
-                  <Text style={styles.helpText}>Select the items each person ordered from the available items list.</Text>
-                </View>
-
-                <View style={styles.helpSection}>
-                  <Text style={styles.helpSectionTitle}>3. Split Shared Items</Text>
-                  <Text style={styles.helpText}>Use the split button (branch icon) if an item was shared between multiple people.</Text>
-                </View>
-
-                <View style={styles.helpSection}>
-                  <Text style={styles.helpSectionTitle}>4. Repeat for Everyone</Text>
-                  <Text style={styles.helpText}>Confirm each person's items and repeat until all items are assigned.</Text>
-                </View>
-
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={toggleHelp}
-                >
-                  <Text style={styles.closeButtonText}>Got it!</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
+          <HelpModal 
+            visible={helpVisible} 
+            onClose={() => setHelpVisible(false)} 
+          />
 
           <ScrollView style={styles.content}>
             {availableItems.length > 0 ? (
               // Show guest name input or item selection only if there are items left
               showNameInput ? (
-                <View style={styles.card}>
-                  <Text style={styles.sectionTitle}>Enter Guest Name</Text>
-                  <TextInput
-                    style={styles.nameInput}
-                    value={guestName}
-                    onChangeText={setGuestName}
-                    placeholder="Guest Name"
-                    placeholderTextColor="#999"
-                    autoFocus
-                  />
-                  <TouchableOpacity 
-                    style={styles.nextButton}
-                    onPress={handleNextAfterName}
-                  >
-                    <Text style={styles.nextButtonText}>Next</Text>
-                  </TouchableOpacity>
-                </View>
+                <GuestNameInput 
+                  guestName={guestName} 
+                  setGuestName={setGuestName} 
+                  onNext={handleNextAfterName} 
+                />
               ) : (
-                <View style={styles.card}>
-                  <Text style={styles.sectionTitle}>Select Items for {guestName}</Text>
-                  
-                  {availableItems.length === 0 ? (
-                    <Text style={styles.noItemsText}>No items available</Text>
-                  ) : (
-                    <FlatList
-                      data={availableItems}
-                      keyExtractor={item => item.id}
-                      renderItem={({ item }) => (
-                        <TouchableOpacity 
-                          style={[
-                            styles.itemRow,
-                            selectedItems.some(i => i.id === item.id) && styles.selectedItem
-                          ]}
-                          onPress={() => toggleItemSelection(item.id)}
-                        >
-                          <View style={styles.itemNameContainer}>
-                            <Text style={styles.itemName}>{item.name}</Text>
-                            {selectedItems.some(i => i.id === item.id) && (
-                              <Ionicons name="checkmark-circle" size={18} color="#4CDE80" style={styles.checkmark} />
-                            )}
-                          </View>
-                          <View style={styles.itemPriceContainer}>
-                            <Text style={styles.itemPrice}>{formatCurrency(item.price)}</Text>
-                            {!item.isSplit && (
-                              <TouchableOpacity 
-                                style={styles.splitButton}
-                                onPress={() => openSplitModal(item)}
-                              >
-                                <Ionicons name="git-branch-outline" size={18} color="#3442C6" />
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      )}
-                      scrollEnabled={false}
-                      style={styles.itemsList}
-                    />
-                  )}
-                  
-                  <View style={styles.buttonContainer}>
-                    <TouchableOpacity 
-                      style={styles.confirmButton}
-                      onPress={confirmGuestItems}
-                    >
-                      <Text style={styles.confirmButtonText}>Confirm Items</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                <ItemSelection 
+                  guestName={guestName}
+                  availableItems={availableItems}
+                  selectedItems={selectedItems}
+                  onItemSelect={toggleItemSelection}
+                  onSplitItem={openSplitModal}
+                  onConfirm={confirmGuestItems}
+                  formatCurrency={(price) => formatCurrency(price)}
+                />
               )
             ) : (
-              // Animated celebration card
-              <View style={styles.card}>
-                <View style={styles.celebrationContainer}>
-                  {/* Confetti particles */}
-                  {confettiX.map((x, index) => (
-                    <Animated.View 
-                      key={index}
-                      style={[
-                        styles.confetti,
-                        {
-                          backgroundColor: ['#FF9500', '#4CDE80', '#3442C6', '#FFD54F', '#FF4F66'][index % 5],
-                          transform: [
-                            { translateY: confettiY },
-                            { translateX: x },
-                            { rotate: `${index * 30}deg` }
-                          ],
-                          opacity: celebrationOpacity
-                        }
-                      ]}
-                    />
-                  ))}
-                  
-                  {/* Success checkmark */}
-                  <Animated.View style={{
-                    transform: [{ scale: celebrationScale }],
-                    opacity: celebrationOpacity
-                  }}>
-                    <View style={styles.successCircle}>
-                      <Ionicons name="checkmark" size={40} color="white" />
-                    </View>
-                  </Animated.View>
-                </View>
-                
-                <Animated.Text 
-                  style={[
-                    styles.sectionTitle, 
-                    { 
-                      opacity: celebrationOpacity,
-                      transform: [{ scale: Animated.add(0.8, Animated.multiply(celebrationScale, 0.2)) }]
-                    }
-                  ]}
-                >
-                  Bill Split Complete!
-                </Animated.Text>
-                
-                <Animated.Text 
-                  style={[
-                    styles.completionText,
-                    { opacity: celebrationOpacity }
-                  ]}
-                >
-                  All items have been assigned to guests. Review the guest totals below.
-                </Animated.Text>
-                
-                <TouchableOpacity 
-                  style={styles.shareButton}
-                  onPress={handleShare}
-                >
-                  <Text style={styles.shareButtonText}>Share Split Details</Text>
-                </TouchableOpacity>
-              </View>
+              // Animated celebration card when all items are assigned
+              <CelebrationView 
+                celebrationScale={celebrationScale}
+                celebrationOpacity={celebrationOpacity}
+                confettiY={confettiY}
+                confettiX={confettiX}
+                onShare={handleShare}
+                onShowCurrencyModal={() => setShowCurrencyModal(true)}
+                onReset={handleReset}
+                targetCurrency={targetCurrency}
+                originalCurrency={originalCurrency}
+              />
             )}
             
             {/* Previous Guests Summary - always show this section */}
             {previousGuests.length > 0 && (
-              <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Guest Totals</Text>
-                {[...previousGuests].reverse().map((guest, index) => (
-                  <View key={index} style={styles.guestSummary}>
-                    <TouchableOpacity 
-                      style={styles.guestSummaryHeader}
-                      onPress={() => toggleGuestDetails(index)}
-                    >
-                      <Text style={styles.guestName}>{guest.name}</Text>
-                      <View style={styles.guestTotalContainer}>
-                        <Text style={styles.guestTotal}>
-                          Total: {formatCurrency(guest.total)}
-                        </Text>
-                        <Ionicons 
-                          name={expandedGuest === index ? "chevron-up" : "chevron-down"} 
-                          size={18} 
-                          color="#666"
-                        />
-                      </View>
-                    </TouchableOpacity>
-                    
-                    {expandedGuest === index && (
-                      <View style={styles.guestDetails}>
-                        {guest.items.map((item, itemIndex) => (
-                          <View key={itemIndex} style={styles.guestItemRow}>
-                            <Text style={styles.guestItemName}>{item.name}</Text>
-                            <Text style={styles.guestItemPrice}>{formatCurrency(item.price)}</Text>
-                          </View>
-                        ))}
-                        
-                        <View style={styles.guestItemDivider} />
-                        
-                        <View style={styles.guestItemRow}>
-                          <Text style={styles.guestItemSubtotal}>Subtotal</Text>
-                          <Text style={styles.guestItemSubtotalPrice}>{formatCurrency(guest.subtotal)}</Text>
-                        </View>
-                        
-                        <View style={styles.guestItemRow}>
-                          <Text style={styles.guestItemName}>Tax</Text>
-                          <Text style={styles.guestItemPrice}>{formatCurrency(guest.tax)}</Text>
-                        </View>
-                        
-                        <View style={styles.guestItemRow}>
-                          <Text style={styles.guestItemName}>Tip</Text>
-                          <Text style={styles.guestItemPrice}>{formatCurrency(guest.tip)}</Text>
-                        </View>
-                        
-                        <View style={styles.guestItemDivider} />
-                        
-                        <View style={styles.guestItemRow}>
-                          <Text style={styles.guestItemTotal}>Total</Text>
-                          <Text style={styles.guestItemTotalPrice}>{formatCurrency(guest.total)}</Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
+              <GuestSummary 
+                guests={previousGuests}
+                expandedGuest={expandedGuest}
+                toggleGuestDetails={toggleGuestDetails}
+                formatCurrencyAmount={(amount) => formatCurrencyAmount(
+                  amount, 
+                  targetCurrency, 
+                  originalCurrency, 
+                  billData
+                )}
+                originalCurrency={originalCurrency}
+                targetCurrency={targetCurrency}
+                exchangeRate={exchangeRate}
+              />
             )}
           </ScrollView>
           
           {/* Split Modal */}
-          <Modal
+          <SplitModal 
             visible={splitModalVisible}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setSplitModalVisible(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Split how many ways?</Text>
-                <TextInput
-                  style={styles.splitInput}
-                  value={splitCount}
-                  onChangeText={setSplitCount}
-                  keyboardType="numeric"
-                  autoFocus
-                />
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity 
-                    style={styles.modalCancelButton}
-                    onPress={() => setSplitModalVisible(false)}
-                  >
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.modalConfirmButton}
-                    onPress={handleSplitItem}
-                  >
-                    <Text style={styles.modalConfirmText}>Split</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </Modal>
+            onClose={() => setSplitModalVisible(false)}
+            splitCount={splitCount}
+            setSplitCount={setSplitCount}
+            onConfirm={handleSplitItem}
+          />
+          
+          {/* Currency Converter Modal */}
+          <CurrencyConverterModal
+            visible={showCurrencyModal}
+            onClose={() => setShowCurrencyModal(false)}
+            originalCurrency={originalCurrency}
+            onOriginalCurrencySelect={setOriginalCurrency}
+            targetCurrency={targetCurrency}
+            onTargetCurrencySelect={setTargetCurrency}
+            onConvert={convertCurrency}
+            showOriginalDropdown={showOriginalDropdown}
+            setShowOriginalDropdown={setShowOriginalDropdown}
+            showTargetDropdown={showTargetDropdown}
+            setShowTargetDropdown={setShowTargetDropdown}
+            originalSearchQuery={originalSearchQuery}
+            setOriginalSearchQuery={setOriginalSearchQuery}
+            targetSearchQuery={targetSearchQuery}
+            setTargetSearchQuery={setTargetSearchQuery}
+          />
         </View>
       </SafeAreaView>
     </>
@@ -707,6 +495,12 @@ const styles = StyleSheet.create({
   backButtonSmall: {
     position: 'absolute',
     left: 20,
+    padding: 5,
+    zIndex: 1,
+  },
+  helpButton: {
+    position: 'absolute',
+    right: 20,
     padding: 5,
     zIndex: 1,
   },
@@ -1021,28 +815,111 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   shareButton: {
-    backgroundColor: '#4CDE80',
-    paddingVertical: 14,
+    width: '100%',
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderRadius: 30,
+  },
+  shareButtonGradient: {
+    flexDirection: 'row',
+    paddingVertical: 16,
     borderRadius: 30,
     alignItems: 'center',
-    marginTop: 15,
+    justifyContent: 'center',
+  },
+  shareIcon: {
+    marginRight: 10,
   },
   shareButtonText: {
     color: 'white',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 18,
   },
-  helpButton: {
-    position: 'absolute',
-    top: 20,
-    right: 15,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
+  currencyButtonsContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 10,
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+  currencyConverterButton: {
+    backgroundColor: "#8360FF", // Purple color matching gradient
+    borderRadius: 25,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+    flex: 1,
+  },
+  resetIconButton: {
+    backgroundColor: "white",
+    borderRadius: 30,
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  currencyIcon: {
+    marginRight: 8,
+  },
+  currencyButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+  },
+  conversionActiveContainer: {
+    marginTop: 15,
+    alignItems: 'center',
+  },
+  currencyBadge: {
+    backgroundColor: 'rgba(52, 66, 198, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 66, 198, 0.3)',
+  },
+  currencyBadgeText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  conversionInfoBox: {
+    backgroundColor: 'rgba(52, 66, 198, 0.05)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3442C6',
+  },
+  conversionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  conversionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3442C6',
+  },
+  conversionText: {
+    fontSize: 13,
+    color: '#666',
   },
   celebrationContainer: {
     alignItems: 'center',

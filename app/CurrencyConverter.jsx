@@ -2,10 +2,13 @@ import { View, Text, Modal, TouchableOpacity, ScrollView, StyleSheet, TextInput,
 import { useState, useEffect } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { currencies, searchCurrencies } from './utils/currencies';
-import CurrencyAPI from '@everapi/currencyapi-js';
 
-// Initialize at top level of your component/file
-const currencyApi = new CurrencyAPI('fca_live_3DtISZBiBUFs8JAphIVmm2B5w9PjB2kfvLRChFIP');
+// Define backend URL with better environment handling
+// In development, it will use localhost
+// In production, it should use your deployed backend URL
+const DEV_API_URL = 'http://localhost:5000';
+const PROD_API_URL = 'https://flick2split-api.herokuapp.com'; // Update with your actual production URL
+const API_URL = __DEV__ ? DEV_API_URL : PROD_API_URL;
 
 export const useCurrencyConverter = (initialCurrencyCode = null) => {
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -24,18 +27,63 @@ export const useCurrencyConverter = (initialCurrencyCode = null) => {
     }
     
     try {
-      const response = await currencyApi.latest({
-        base_currency: fromCurrency,
-        currencies: toCurrency
+      console.log(`Converting from ${fromCurrency} to ${toCurrency}`);
+      
+      // Call our backend endpoint instead of the API directly
+      const response = await fetch(`${API_URL}/convert-currency`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fromCurrency: fromCurrency,
+          toCurrency: toCurrency
+        }),
+      }).catch(error => {
+        console.error('Network error:', error);
+        throw new Error('Network connection error. Please check your internet connection.');
       });
       
-      const rate = response.data?.[toCurrency]?.value;
+      console.log(`API response status: ${response.status}`);
       
-      if (!rate) throw new Error('Exchange rate not found');
+      // Handle HTTP errors
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error response: ${errorText}`);
+        throw new Error(`Connection error (${response.status}). Please try again later.`);
+      }
       
-      setExchangeRate(rate);
+      // Safely parse JSON with error handling
+      let data;
+      try {
+        const text = await response.text();
+        console.log(`Raw response: ${text}`);
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('JSON parsing error:', parseError);
+        // Use a default exchange rate of 1 for graceful failure
+        console.log('Using default exchange rate of 1');
+        setExchangeRate(1);
+        return;
+      }
+      
+      console.log('Parsed response:', data);
+      
+      if (!data.success) {
+        console.error('API returned error:', data.message);
+        // Use a default exchange rate of 1 for graceful failure
+        setExchangeRate(1);
+        return;
+      }
+      
+      setExchangeRate(data.rate);
     } catch (error) {
-      Alert.alert('Conversion Error', error.message);
+      console.error('Currency conversion error:', error);
+      // More user-friendly error message
+      Alert.alert(
+        'Currency Conversion',
+        'Unable to get the latest exchange rate. Using an approximate rate for now.'
+      );
       setExchangeRate(1);
     }
   };
