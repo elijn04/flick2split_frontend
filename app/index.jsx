@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native';
 
 
 const { width } = Dimensions.get('window');
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://flick2split-backend.onrender.com';
 
 /**
  * Main app component for bill splitting application
@@ -297,12 +297,21 @@ export default function Index() {
         encoding: FileSystem.EncodingType.Base64,
       });
 
+      console.log("Attempting to fetch from:", API_URL);
+      
+      // Add timeout for fetch to avoid hanging indefinitely
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
       // Send to server
       const response = await fetch(`${API_URL}/process-bill`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: base64Image }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`Server responded with status: ${response.status}`);
@@ -325,18 +334,19 @@ export default function Index() {
     } catch (error) {
       console.error('Error:', error);
       
-      // Provide specific guidance for photo quality issues
-      let message = error.message.includes('Network request failed')
-        ? `Cannot connect to server at ${API_URL}. Check if server is running.`
-        : error.message || 'Network error or server unavailable';
+      // Detailed error handling for different error types
+      let message;
       
-      // Add helpful photo-taking tips for any processing errors
-      if (!error.message.includes('Network request failed')) {
+      if (error.name === 'AbortError') {
+        message = "Connection timed out. Please check your internet connection and try again.";
+        Alert.alert("Connection Timeout", message, [{ text: "OK" }]);
+      } else if (error.message.includes('Network request failed')) {
+        message = "Unable to connect to the server. Please check your internet connection and try again.";
+        Alert.alert("Connection Error", message, [{ text: "OK" }]);
+      } else {
         message = "We couldn't read your receipt correctly.";
         setErrorMessage(message);
         setErrorVisible(true);
-      } else {
-        Alert.alert("Connection Error", message, [{ text: "OK" }]);
       }
       
       setButtonState("error");

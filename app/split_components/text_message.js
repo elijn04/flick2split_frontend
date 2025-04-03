@@ -45,24 +45,41 @@ export const formatGuestDetailsForSharing = (previousGuests, billData, targetCur
   message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
   
   previousGuests.forEach(guest => {
-    const guestTotal = isConverted ? guest.total * exchangeRate : guest.total;
-    message += `${guest.name} owes ${formatCurrencyAmountForSharing(guestTotal, targetCurrency, originalCurrency, billData)} 💰\n`;
+    if (isConverted) {
+      const convertedTotal = guest.total * exchangeRate;
+      message += `${guest.name} owes ${formatCurrencyAmountForSharing(convertedTotal, targetCurrency, originalCurrency, billData)} 💰\n`;
+    } else {
+      message += `${guest.name} owes ${formatCurrencyAmountForSharing(guest.total, targetCurrency, originalCurrency, billData)} 💰\n`;
+    }
   });
   
   // Add total bill information
   message += "\n📋 BILL DETAILS 📋\n";
   message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-  message += `🧾 Subtotal: ${formatCurrencyAmountForSharing(billData.subtotal, targetCurrency, originalCurrency, billData)}\n`;
-  message += `🏛️ Tax: ${formatCurrencyAmountForSharing(billData.tax, targetCurrency, originalCurrency, billData)}\n`;
-  message += `💁 Tip: ${formatCurrencyAmountForSharing(billData.tip, targetCurrency, originalCurrency, billData)}\n`;
-  message += `💯 Total: ${formatCurrencyAmountForSharing(totalBillAmount, targetCurrency, originalCurrency, billData)}\n`;
+  
+  // Original currency values
+  const originalSymbol = getCurrencySymbol(originalCurrency);
+  
+  if (isConverted) {
+    // Show both original and converted totals
+    message += `🧾 Subtotal: ${originalSymbol}${billData.subtotal.toFixed(2)} (${formatCurrencyAmountForSharing(billData.subtotal * exchangeRate, targetCurrency, originalCurrency, billData)})\n`;
+    message += `🏛️ Tax: ${originalSymbol}${billData.tax.toFixed(2)} (${formatCurrencyAmountForSharing(billData.tax * exchangeRate, targetCurrency, originalCurrency, billData)})\n`;
+    message += `💁 Tip: ${originalSymbol}${billData.tip.toFixed(2)} (${formatCurrencyAmountForSharing(billData.tip * exchangeRate, targetCurrency, originalCurrency, billData)})\n`;
+    message += `💯 Total: ${originalSymbol}${totalBillAmount.toFixed(2)} (${formatCurrencyAmountForSharing(totalBillAmount * exchangeRate, targetCurrency, originalCurrency, billData)})\n`;
+  } else {
+    message += `🧾 Subtotal: ${formatCurrencyAmountForSharing(billData.subtotal, targetCurrency, originalCurrency, billData)}\n`;
+    message += `🏛️ Tax: ${formatCurrencyAmountForSharing(billData.tax, targetCurrency, originalCurrency, billData)}\n`;
+    message += `💁 Tip: ${formatCurrencyAmountForSharing(billData.tip, targetCurrency, originalCurrency, billData)}\n`;
+    message += `💯 Total: ${formatCurrencyAmountForSharing(totalBillAmount, targetCurrency, originalCurrency, billData)}\n`;
+  }
+  
   message += `👥 Split between ${previousGuests.length} people\n\n`;
   
   // Add conversion info if applicable
   if (isConverted) {
-    message += `🌍 Converted from ${originalCurrency} to ${targetCurrency}\n`;
-    message += `📈 Exchange rate: 1 ${originalCurrency} = ${exchangeRate.toFixed(4)} ${targetCurrency}\n`;
-    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+    message += `🌍 CURRENCY CONVERSION 🌍\n`;
+    message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+    message += `${originalCurrency} → ${targetCurrency} @ ${exchangeRate.toFixed(4)}\n\n`;
   }
   
   // Add detailed breakdown
@@ -70,21 +87,31 @@ export const formatGuestDetailsForSharing = (previousGuests, billData, targetCur
   message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
   
   previousGuests.forEach(guest => {
-    const guestSubtotal = isConverted ? guest.subtotal * exchangeRate : guest.subtotal;
-    const guestTax = isConverted ? guest.tax * exchangeRate : guest.tax;
-    const guestTip = isConverted ? guest.tip * exchangeRate : guest.tip;
-    const guestTotal = isConverted ? guest.total * exchangeRate : guest.total;
+    // Always show original prices for items and subtotals
+    if (isConverted) {
+      const convertedTotal = guest.total * exchangeRate;
+      message += `👤 ${guest.name}'s TOTAL: ${formatCurrencyAmountForSharing(convertedTotal, targetCurrency, originalCurrency, billData)}\n`;
+    } else {
+      message += `👤 ${guest.name}'s TOTAL: ${formatCurrencyAmountForSharing(guest.total, targetCurrency, originalCurrency, billData)}\n`;
+    }
     
-    message += `👤 ${guest.name}'s TOTAL: ${formatCurrencyAmountForSharing(guestTotal, targetCurrency, originalCurrency, billData)}\n`;
     message += "   ITEMS:\n";
     guest.items.forEach(item => {
-      const itemPrice = isConverted ? item.price * exchangeRate : item.price;
-      message += `   • ${item.name}: ${formatCurrencyAmountForSharing(itemPrice, targetCurrency, originalCurrency, billData)}\n`;
+      // Show original item prices (no conversion)
+      message += `   • ${item.name}: ${originalSymbol}${item.price.toFixed(2)}\n`;
     });
-    message += `   📝 Subtotal: ${formatCurrencyAmountForSharing(guestSubtotal, targetCurrency, originalCurrency, billData)}\n`;
-    message += `   🏛️ Tax: ${formatCurrencyAmountForSharing(guestTax, targetCurrency, originalCurrency, billData)}\n`;
-    message += `   💁 Tip: ${formatCurrencyAmountForSharing(guestTip, targetCurrency, originalCurrency, billData)}\n`;
-    message += `   💰 Total: ${formatCurrencyAmountForSharing(guestTotal, targetCurrency, originalCurrency, billData)}\n\n`;
+    
+    message += `   📝 Subtotal: ${originalSymbol}${guest.subtotal.toFixed(2)}\n`;
+    message += `   🏛️ Tax: ${originalSymbol}${guest.tax.toFixed(2)}\n`;
+    message += `   💁 Tip: ${originalSymbol}${guest.tip.toFixed(2)}\n`;
+    
+    // If conversion is active, show both original and converted totals
+    if (isConverted) {
+      message += `   💰 Original Total: ${originalSymbol}${guest.total.toFixed(2)}\n`;
+      message += `   💱 Converted Total: ${formatCurrencyAmountForSharing(guest.total * exchangeRate, targetCurrency, originalCurrency, billData)}\n\n`;
+    } else {
+      message += `   💰 Total: ${formatCurrencyAmountForSharing(guest.total, targetCurrency, originalCurrency, billData)}\n\n`;
+    }
   });
   
   message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";

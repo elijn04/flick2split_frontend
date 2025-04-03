@@ -2,7 +2,6 @@ import { View, Text, Modal, TouchableOpacity, ScrollView, StyleSheet, TextInput,
 import { useState, useEffect } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { currencies, searchCurrencies } from './utils/currencies';
-import { getExchangeRate } from './utils/currencyApi';
 
 export const useCurrencyConverter = (initialCurrencyCode = null) => {
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -13,6 +12,26 @@ export const useCurrencyConverter = (initialCurrencyCode = null) => {
   const [showTargetDropdown, setShowTargetDropdown] = useState(false);
   const [originalSearchQuery, setOriginalSearchQuery] = useState('');
   const [targetSearchQuery, setTargetSearchQuery] = useState('');
+
+  const getExchangeRate = async (fromCurrency, toCurrency) => {
+    if (fromCurrency === toCurrency) {
+      return 1;
+    }
+    
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://flick2split-backend.onrender.com';
+      const response = await fetch(`${API_URL}/exchange_rate?from_currency=${fromCurrency}&to_currency=${toCurrency}`);
+      const json = await response.json();
+      if (json.error) {
+        throw new Error(json.error);
+      }
+      const rate = json.data?.[toCurrency.toUpperCase()]?.value;
+      if (!rate) throw new Error('Exchange rate not found');
+      return rate;
+    } catch (error) {
+      throw error;
+    }
+  };
 
   const fetchExchangeRate = async (fromCurrency, toCurrency) => {
     if (fromCurrency === toCurrency) {

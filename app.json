@@ -45,6 +45,12 @@
         "projectId": "2e08b1c1-88ec-42f7-8e90-abb56a426de5"
       },
       "EXPO_PUBLIC_BACKEND_URL": "https://flick2split-backend.onrender.com"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2e08b1c1-88ec-42f7-8e90-abb56a426de5"
     }
   }
 }
